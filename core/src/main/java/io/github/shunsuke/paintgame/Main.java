@@ -8,18 +8,26 @@ import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.MathUtils;
 
+import java.util.ArrayList;
+
 /** {@link com.badlogic.gdx.ApplicationListener} implementation shared by all platforms. */
 public class Main implements ApplicationListener {
     private static final float PLAYER_SIZE = 32f;
     private static final float PLAYER_SPEED = 220f;
+    private static final float BULLET_SIZE = 10f;
+    private static final float BULLET_SPEED = 360f;
+    private static final float FACING_MARKER_SIZE = 8f;
 
     private ShapeRenderer shapeRenderer;
     private OrthographicCamera camera;
+    private final ArrayList<Bullet> bullets = new ArrayList<>();
 
     private float worldWidth;
     private float worldHeight;
     private float playerX;
     private float playerY;
+    private float facingX = 0f;
+    private float facingY = 1f;
 
     @Override
     public void create() {
@@ -49,7 +57,11 @@ public class Main implements ApplicationListener {
 
     @Override
     public void render() {
-        updatePlayerPosition(Gdx.graphics.getDeltaTime());
+        float delta = Gdx.graphics.getDeltaTime();
+
+        updatePlayerPosition(delta);
+        updateBullets(delta);
+        handleShooting();
 
         Gdx.gl.glClearColor(0.12f, 0.12f, 0.16f, 1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
@@ -61,8 +73,16 @@ public class Main implements ApplicationListener {
         shapeRenderer.setColor(0.18f, 0.18f, 0.22f, 1f);
         shapeRenderer.rect(0f, 0f, worldWidth, worldHeight);
 
+        shapeRenderer.setColor(1f, 0.85f, 0.2f, 1f);
+        for (Bullet bullet : bullets) {
+            shapeRenderer.circle(bullet.x, bullet.y, BULLET_SIZE / 2f);
+        }
+
         shapeRenderer.setColor(0.2f, 0.8f, 0.9f, 1f);
         shapeRenderer.rect(playerX, playerY, PLAYER_SIZE, PLAYER_SIZE);
+
+        shapeRenderer.setColor(1f, 1f, 1f, 1f);
+        shapeRenderer.circle(getFacingMarkerX(), getFacingMarkerY(), FACING_MARKER_SIZE / 2f);
         shapeRenderer.end();
     }
 
@@ -89,12 +109,49 @@ public class Main implements ApplicationListener {
             moveX /= length;
             moveY /= length;
 
+            facingX = moveX;
+            facingY = moveY;
+
             playerX += moveX * PLAYER_SPEED * delta;
             playerY += moveY * PLAYER_SPEED * delta;
         }
 
         playerX = MathUtils.clamp(playerX, 0f, worldWidth - PLAYER_SIZE);
         playerY = MathUtils.clamp(playerY, 0f, worldHeight - PLAYER_SIZE);
+    }
+
+    private void handleShooting() {
+        if (!Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
+            return;
+        }
+
+        float bulletX = playerX + PLAYER_SIZE / 2f;
+        float bulletY = playerY + PLAYER_SIZE / 2f;
+        bullets.add(new Bullet(bulletX, bulletY, facingX, facingY));
+    }
+
+    private void updateBullets(float delta) {
+        for (int i = bullets.size() - 1; i >= 0; i--) {
+            Bullet bullet = bullets.get(i);
+            bullet.x += bullet.directionX * BULLET_SPEED * delta;
+            bullet.y += bullet.directionY * BULLET_SPEED * delta;
+
+            // Remove bullets once they leave the visible play area.
+            if (bullet.x + BULLET_SIZE / 2f < 0f
+                || bullet.x - BULLET_SIZE / 2f > worldWidth
+                || bullet.y + BULLET_SIZE / 2f < 0f
+                || bullet.y - BULLET_SIZE / 2f > worldHeight) {
+                bullets.remove(i);
+            }
+        }
+    }
+
+    private float getFacingMarkerX() {
+        return playerX + PLAYER_SIZE / 2f + facingX * (PLAYER_SIZE / 2f);
+    }
+
+    private float getFacingMarkerY() {
+        return playerY + PLAYER_SIZE / 2f + facingY * (PLAYER_SIZE / 2f);
     }
 
     private boolean isLeftPressed() {
@@ -127,6 +184,20 @@ public class Main implements ApplicationListener {
     public void dispose() {
         if (shapeRenderer != null) {
             shapeRenderer.dispose();
+        }
+    }
+
+    private static class Bullet {
+        private float x;
+        private float y;
+        private final float directionX;
+        private final float directionY;
+
+        private Bullet(float x, float y, float directionX, float directionY) {
+            this.x = x;
+            this.y = y;
+            this.directionX = directionX;
+            this.directionY = directionY;
         }
     }
 }
