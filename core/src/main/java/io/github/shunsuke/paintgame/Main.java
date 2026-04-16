@@ -1,26 +1,116 @@
 package io.github.shunsuke.paintgame;
 
 import com.badlogic.gdx.ApplicationListener;
+import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.Input;
+import com.badlogic.gdx.graphics.GL20;
+import com.badlogic.gdx.graphics.OrthographicCamera;
+import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
+import com.badlogic.gdx.math.MathUtils;
 
 /** {@link com.badlogic.gdx.ApplicationListener} implementation shared by all platforms. */
 public class Main implements ApplicationListener {
+    private static final float PLAYER_SIZE = 32f;
+    private static final float PLAYER_SPEED = 220f;
+
+    private ShapeRenderer shapeRenderer;
+    private OrthographicCamera camera;
+
+    private float worldWidth;
+    private float worldHeight;
+    private float playerX;
+    private float playerY;
+
     @Override
     public void create() {
-        // Prepare your application here.
+        shapeRenderer = new ShapeRenderer();
+        resize(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
+
+        playerX = (worldWidth - PLAYER_SIZE) / 2f;
+        playerY = (worldHeight - PLAYER_SIZE) / 2f;
     }
 
     @Override
     public void resize(int width, int height) {
         // If the window is minimized on a desktop (LWJGL3) platform, width and height are 0, which causes problems.
         // In that case, we don't resize anything, and wait for the window to be a normal size before updating.
-        if(width <= 0 || height <= 0) return;
+        if (width <= 0 || height <= 0) {
+            return;
+        }
 
-        // Resize your application here. The parameters represent the new window size.
+        worldWidth = width;
+        worldHeight = height;
+
+        if (camera == null) {
+            camera = new OrthographicCamera();
+        }
+        camera.setToOrtho(false, worldWidth, worldHeight);
     }
 
     @Override
     public void render() {
-        // Draw your application here.
+        updatePlayerPosition(Gdx.graphics.getDeltaTime());
+
+        Gdx.gl.glClearColor(0.12f, 0.12f, 0.16f, 1f);
+        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+
+        camera.update();
+        shapeRenderer.setProjectionMatrix(camera.combined);
+
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        shapeRenderer.setColor(0.18f, 0.18f, 0.22f, 1f);
+        shapeRenderer.rect(0f, 0f, worldWidth, worldHeight);
+
+        shapeRenderer.setColor(0.2f, 0.8f, 0.9f, 1f);
+        shapeRenderer.rect(playerX, playerY, PLAYER_SIZE, PLAYER_SIZE);
+        shapeRenderer.end();
+    }
+
+    private void updatePlayerPosition(float delta) {
+        float moveX = 0f;
+        float moveY = 0f;
+
+        if (isLeftPressed()) {
+            moveX -= 1f;
+        }
+        if (isRightPressed()) {
+            moveX += 1f;
+        }
+        if (isDownPressed()) {
+            moveY -= 1f;
+        }
+        if (isUpPressed()) {
+            moveY += 1f;
+        }
+
+        // Normalize diagonal movement so it is not faster than horizontal or vertical movement.
+        if (moveX != 0f || moveY != 0f) {
+            float length = (float) Math.sqrt(moveX * moveX + moveY * moveY);
+            moveX /= length;
+            moveY /= length;
+
+            playerX += moveX * PLAYER_SPEED * delta;
+            playerY += moveY * PLAYER_SPEED * delta;
+        }
+
+        playerX = MathUtils.clamp(playerX, 0f, worldWidth - PLAYER_SIZE);
+        playerY = MathUtils.clamp(playerY, 0f, worldHeight - PLAYER_SIZE);
+    }
+
+    private boolean isLeftPressed() {
+        return Gdx.input.isKeyPressed(Input.Keys.LEFT) || Gdx.input.isKeyPressed(Input.Keys.A);
+    }
+
+    private boolean isRightPressed() {
+        return Gdx.input.isKeyPressed(Input.Keys.RIGHT) || Gdx.input.isKeyPressed(Input.Keys.D);
+    }
+
+    private boolean isUpPressed() {
+        return Gdx.input.isKeyPressed(Input.Keys.UP) || Gdx.input.isKeyPressed(Input.Keys.W);
+    }
+
+    private boolean isDownPressed() {
+        return Gdx.input.isKeyPressed(Input.Keys.DOWN) || Gdx.input.isKeyPressed(Input.Keys.S);
     }
 
     @Override
@@ -35,6 +125,8 @@ public class Main implements ApplicationListener {
 
     @Override
     public void dispose() {
-        // Destroy application's resources here.
+        if (shapeRenderer != null) {
+            shapeRenderer.dispose();
+        }
     }
 }
