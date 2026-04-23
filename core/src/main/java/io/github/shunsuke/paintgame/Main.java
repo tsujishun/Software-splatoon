@@ -24,6 +24,11 @@ public class Main implements ApplicationListener {
     private static final float GAME_DURATION_SECONDS = 60f;
     private static final float PLAYER_SIZE = 32f;
     private static final float PLAYER_SPEED = 220f;
+    private static final float ENEMY_SIZE = 30f;
+    private static final float ENEMY_SPEED = 150f;
+    private static final float ENEMY_DIRECTION_CHANGE_MIN = 1.0f;
+    private static final float ENEMY_DIRECTION_CHANGE_MAX = 2.2f;
+    private static final float ENEMY_SHOT_INTERVAL = 1.1f;
     private static final float BULLET_SIZE = 10f;
     private static final float BULLET_SPEED = 360f;
     private static final float FACING_MARKER_SIZE = 8f;
@@ -46,6 +51,12 @@ public class Main implements ApplicationListener {
     private float playerY;
     private float facingX = 0f;
     private float facingY = 1f;
+    private float enemyX;
+    private float enemyY;
+    private float enemyDirectionX = -1f;
+    private float enemyDirectionY = 0f;
+    private float enemyDirectionChangeTimer;
+    private float enemyShotTimer;
     private int gridColumns;
     private int gridRows;
     private int[][] cellStates;
@@ -118,8 +129,10 @@ public class Main implements ApplicationListener {
 
         handleColorToggle();
         updatePlayerPosition(delta);
+        updateEnemy(delta);
         updateBullets(delta);
         handleShooting();
+        handleEnemyShooting(delta);
     }
 
     private void updatePlayerPosition(float delta) {
@@ -163,7 +176,7 @@ public class Main implements ApplicationListener {
 
         float bulletX = playerX + PLAYER_SIZE / 2f;
         float bulletY = playerY + PLAYER_SIZE / 2f;
-        bullets.add(new Bullet(bulletX, bulletY, facingX, facingY, currentPaintState));
+        bullets.add(new Bullet(bulletX, bulletY, facingX, facingY, currentPaintState, false));
     }
 
     private void updateBullets(float delta) {
@@ -182,6 +195,54 @@ public class Main implements ApplicationListener {
                 bullets.remove(i);
             }
         }
+    }
+
+    private void updateEnemy(float delta) {
+        enemyDirectionChangeTimer -= delta;
+        if (enemyDirectionChangeTimer <= 0f) {
+            chooseEnemyRandomDirection();
+        }
+
+        // The CPU enemy just wanders around and changes direction when it gets near a wall.
+        float nextEnemyX = enemyX + enemyDirectionX * ENEMY_SPEED * delta;
+        float nextEnemyY = enemyY + enemyDirectionY * ENEMY_SPEED * delta;
+        if (!isInsideActorBounds(nextEnemyX, nextEnemyY, ENEMY_SIZE)) {
+            chooseEnemyRandomDirection();
+            nextEnemyX = enemyX + enemyDirectionX * ENEMY_SPEED * delta;
+            nextEnemyY = enemyY + enemyDirectionY * ENEMY_SPEED * delta;
+        }
+
+        enemyX = MathUtils.clamp(nextEnemyX, 0f, worldWidth - ENEMY_SIZE);
+        enemyY = MathUtils.clamp(nextEnemyY, 0f, worldHeight - ENEMY_SIZE);
+    }
+
+    private void handleEnemyShooting(float delta) {
+        enemyShotTimer -= delta;
+        if (enemyShotTimer > 0f) {
+            return;
+        }
+
+        float bulletX = enemyX + ENEMY_SIZE / 2f;
+        float bulletY = enemyY + ENEMY_SIZE / 2f;
+        bullets.add(new Bullet(bulletX, bulletY, enemyDirectionX, enemyDirectionY, CELL_STATE_ENEMY, true));
+        enemyShotTimer = ENEMY_SHOT_INTERVAL;
+    }
+
+    private void chooseEnemyRandomDirection() {
+        for (int attempt = 0; attempt < 8; attempt++) {
+            float randomAngle = MathUtils.random(0f, MathUtils.PI2);
+            float directionX = MathUtils.cos(randomAngle);
+            float directionY = MathUtils.sin(randomAngle);
+            float testEnemyX = enemyX + directionX * ENEMY_SPEED * 0.2f;
+            float testEnemyY = enemyY + directionY * ENEMY_SPEED * 0.2f;
+            if (isInsideActorBounds(testEnemyX, testEnemyY, ENEMY_SIZE)) {
+                enemyDirectionX = directionX;
+                enemyDirectionY = directionY;
+                break;
+            }
+        }
+
+        enemyDirectionChangeTimer = MathUtils.random(ENEMY_DIRECTION_CHANGE_MIN, ENEMY_DIRECTION_CHANGE_MAX);
     }
 
     private float getFacingMarkerX() {
@@ -243,14 +304,31 @@ public class Main implements ApplicationListener {
 
         for (Bullet bullet : bullets) {
             shapeRenderer.setColor(getCellColor(bullet.paintState));
-            shapeRenderer.circle(bullet.x, bullet.y, BULLET_SIZE / 2f);
+            if (bullet.fromEnemy) {
+                shapeRenderer.rect(
+                    bullet.x - BULLET_SIZE / 2f,
+                    bullet.y - BULLET_SIZE / 2f,
+                    BULLET_SIZE,
+                    BULLET_SIZE
+                );
+            } else {
+                shapeRenderer.circle(bullet.x, bullet.y, BULLET_SIZE / 2f);
+            }
         }
 
         shapeRenderer.setColor(0.2f, 0.8f, 0.9f, 1f);
         shapeRenderer.rect(playerX, playerY, PLAYER_SIZE, PLAYER_SIZE);
 
+        shapeRenderer.setColor(ENEMY_CELL_COLOR);
+        shapeRenderer.circle(enemyX + ENEMY_SIZE / 2f, enemyY + ENEMY_SIZE / 2f, ENEMY_SIZE / 2f);
+
         shapeRenderer.setColor(1f, 1f, 1f, 1f);
         shapeRenderer.circle(getFacingMarkerX(), getFacingMarkerY(), FACING_MARKER_SIZE / 2f);
+        shapeRenderer.circle(
+            enemyX + ENEMY_SIZE / 2f + enemyDirectionX * (ENEMY_SIZE / 2f),
+            enemyY + ENEMY_SIZE / 2f + enemyDirectionY * (ENEMY_SIZE / 2f),
+            FACING_MARKER_SIZE / 2f
+        );
         shapeRenderer.end();
     }
 
@@ -275,6 +353,13 @@ public class Main implements ApplicationListener {
 
     private boolean isInsideWorld(float worldX, float worldY) {
         return worldX >= 0f && worldX < worldWidth && worldY >= 0f && worldY < worldHeight;
+    }
+
+    private boolean isInsideActorBounds(float actorX, float actorY, float actorSize) {
+        return actorX >= 0f
+            && actorX <= worldWidth - actorSize
+            && actorY >= 0f
+            && actorY <= worldHeight - actorSize;
     }
 
     private void drawHud() {
@@ -312,6 +397,10 @@ public class Main implements ApplicationListener {
         playerY = (worldHeight - PLAYER_SIZE) / 2f;
         facingX = 0f;
         facingY = 1f;
+        enemyX = MathUtils.clamp(worldWidth - ENEMY_SIZE - 80f, 0f, worldWidth - ENEMY_SIZE);
+        enemyY = MathUtils.clamp(worldHeight - ENEMY_SIZE - 80f, 0f, worldHeight - ENEMY_SIZE);
+        chooseEnemyRandomDirection();
+        enemyShotTimer = ENEMY_SHOT_INTERVAL;
         bullets.clear();
         initializeFloorGrid();
         currentPaintState = CELL_STATE_PLAYER;
@@ -404,13 +493,15 @@ public class Main implements ApplicationListener {
         private final float directionX;
         private final float directionY;
         private final int paintState;
+        private final boolean fromEnemy;
 
-        private Bullet(float x, float y, float directionX, float directionY, int paintState) {
+        private Bullet(float x, float y, float directionX, float directionY, int paintState, boolean fromEnemy) {
             this.x = x;
             this.y = y;
             this.directionX = directionX;
             this.directionY = directionY;
             this.paintState = paintState;
+            this.fromEnemy = fromEnemy;
         }
     }
 }
