@@ -15,6 +15,12 @@ import java.util.ArrayList;
 
 /** {@link com.badlogic.gdx.ApplicationListener} implementation shared by all platforms. */
 public class Main implements ApplicationListener {
+    private static final int CELL_STATE_EMPTY = 0;
+    private static final int CELL_STATE_PLAYER = 1;
+    private static final int CELL_STATE_ENEMY = 2;
+    private static final Color EMPTY_CELL_COLOR = new Color(0.18f, 0.18f, 0.22f, 1f);
+    private static final Color PLAYER_CELL_COLOR = new Color(0.25f, 0.7f, 0.95f, 1f);
+    private static final Color ENEMY_CELL_COLOR = new Color(0.95f, 0.45f, 0.7f, 1f);
     private static final float GAME_DURATION_SECONDS = 60f;
     private static final float PLAYER_SIZE = 32f;
     private static final float PLAYER_SPEED = 220f;
@@ -42,8 +48,10 @@ public class Main implements ApplicationListener {
     private float facingY = 1f;
     private int gridColumns;
     private int gridRows;
-    private boolean[][] paintedCells;
-    private int paintedCellCount;
+    private int[][] cellStates;
+    private int playerPaintedCellCount;
+    private int enemyPaintedCellCount;
+    private int currentPaintState;
     private float remainingTime;
     private boolean gameOver;
 
@@ -108,6 +116,7 @@ public class Main implements ApplicationListener {
             return;
         }
 
+        handleColorToggle();
         updatePlayerPosition(delta);
         updateBullets(delta);
         handleShooting();
@@ -154,7 +163,7 @@ public class Main implements ApplicationListener {
 
         float bulletX = playerX + PLAYER_SIZE / 2f;
         float bulletY = playerY + PLAYER_SIZE / 2f;
-        bullets.add(new Bullet(bulletX, bulletY, facingX, facingY));
+        bullets.add(new Bullet(bulletX, bulletY, facingX, facingY, currentPaintState));
     }
 
     private void updateBullets(float delta) {
@@ -163,7 +172,7 @@ public class Main implements ApplicationListener {
             bullet.x += bullet.directionX * BULLET_SPEED * delta;
             bullet.y += bullet.directionY * BULLET_SPEED * delta;
 
-            paintCellAt(bullet.x, bullet.y);
+            paintCellAt(bullet.x, bullet.y, bullet.paintState);
 
             // Remove bullets once they leave the visible play area.
             if (bullet.x + BULLET_SIZE / 2f < 0f
@@ -186,8 +195,9 @@ public class Main implements ApplicationListener {
     private void initializeFloorGrid() {
         gridColumns = Math.max(1, MathUtils.ceil(worldWidth / GRID_CELL_SIZE));
         gridRows = Math.max(1, MathUtils.ceil(worldHeight / GRID_CELL_SIZE));
-        paintedCells = new boolean[gridRows][gridColumns];
-        paintedCellCount = 0;
+        cellStates = new int[gridRows][gridColumns];
+        playerPaintedCellCount = 0;
+        enemyPaintedCellCount = 0;
     }
 
     private void drawFloorGrid() {
@@ -203,11 +213,7 @@ public class Main implements ApplicationListener {
                     continue;
                 }
 
-                if (paintedCells[row][column]) {
-                    shapeRenderer.setColor(0.25f, 0.7f, 0.95f, 1f);
-                } else {
-                    shapeRenderer.setColor(0.18f, 0.18f, 0.22f, 1f);
-                }
+                shapeRenderer.setColor(getCellColor(cellStates[row][column]));
                 shapeRenderer.rect(cellX, cellY, cellWidth, cellHeight);
             }
         }
@@ -235,8 +241,8 @@ public class Main implements ApplicationListener {
     private void drawActors() {
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
 
-        shapeRenderer.setColor(1f, 0.85f, 0.2f, 1f);
         for (Bullet bullet : bullets) {
+            shapeRenderer.setColor(getCellColor(bullet.paintState));
             shapeRenderer.circle(bullet.x, bullet.y, BULLET_SIZE / 2f);
         }
 
@@ -248,19 +254,23 @@ public class Main implements ApplicationListener {
         shapeRenderer.end();
     }
 
-    private void paintCellAt(float worldX, float worldY) {
-        if (paintedCells == null || !isInsideWorld(worldX, worldY)) {
+    private void paintCellAt(float worldX, float worldY, int paintState) {
+        if (cellStates == null || !isInsideWorld(worldX, worldY)) {
             return;
         }
 
         // Convert the bullet position to a row and column in the floor grid.
         int column = Math.min(gridColumns - 1, (int) (worldX / GRID_CELL_SIZE));
         int row = Math.min(gridRows - 1, (int) (worldY / GRID_CELL_SIZE));
-        // Count the cell only when its color changes for the first time.
-        if (!paintedCells[row][column]) {
-            paintedCells[row][column] = true;
-            paintedCellCount++;
+        int previousState = cellStates[row][column];
+        if (previousState == paintState) {
+            return;
         }
+
+        // When a cell changes color, move its count from the old color to the new color.
+        removePaintedCellCount(previousState);
+        cellStates[row][column] = paintState;
+        addPaintedCellCount(paintState);
     }
 
     private boolean isInsideWorld(float worldX, float worldY) {
@@ -269,13 +279,26 @@ public class Main implements ApplicationListener {
 
     private void drawHud() {
         spriteBatch.begin();
-        font.draw(spriteBatch, "Painted: " + paintedCellCount, HUD_PADDING, worldHeight - HUD_PADDING);
+        font.draw(spriteBatch, "Painted: " + getTotalPaintedCellCount(), HUD_PADDING, worldHeight - HUD_PADDING);
+        font.draw(spriteBatch, "Player: " + playerPaintedCellCount, HUD_PADDING, worldHeight - HUD_PADDING - 20f);
+        font.draw(spriteBatch, "Enemy: " + enemyPaintedCellCount, HUD_PADDING, worldHeight - HUD_PADDING - 40f);
+        font.draw(spriteBatch, "Color: " + getPaintStateName(currentPaintState), HUD_PADDING, worldHeight - HUD_PADDING - 60f);
         font.draw(spriteBatch, "Time: " + MathUtils.ceil(remainingTime), worldWidth - 90f, worldHeight - HUD_PADDING);
         if (gameOver) {
             font.draw(spriteBatch, "Game Over", GAME_OVER_TEXT_X, GAME_OVER_TEXT_Y);
             font.draw(spriteBatch, "Press R to Restart", RESTART_TEXT_X, RESTART_TEXT_Y);
         }
         spriteBatch.end();
+    }
+
+    private void handleColorToggle() {
+        if (Gdx.input.isKeyJustPressed(Input.Keys.T)) {
+            if (currentPaintState == CELL_STATE_PLAYER) {
+                currentPaintState = CELL_STATE_ENEMY;
+            } else {
+                currentPaintState = CELL_STATE_PLAYER;
+            }
+        }
     }
 
     private void handleRestart() {
@@ -291,8 +314,49 @@ public class Main implements ApplicationListener {
         facingY = 1f;
         bullets.clear();
         initializeFloorGrid();
+        currentPaintState = CELL_STATE_PLAYER;
         remainingTime = GAME_DURATION_SECONDS;
         gameOver = false;
+    }
+
+    private int getTotalPaintedCellCount() {
+        return playerPaintedCellCount + enemyPaintedCellCount;
+    }
+
+    private void addPaintedCellCount(int cellState) {
+        if (cellState == CELL_STATE_PLAYER) {
+            playerPaintedCellCount++;
+        } else if (cellState == CELL_STATE_ENEMY) {
+            enemyPaintedCellCount++;
+        }
+    }
+
+    private void removePaintedCellCount(int cellState) {
+        if (cellState == CELL_STATE_PLAYER) {
+            playerPaintedCellCount--;
+        } else if (cellState == CELL_STATE_ENEMY) {
+            enemyPaintedCellCount--;
+        }
+    }
+
+    private Color getCellColor(int cellState) {
+        if (cellState == CELL_STATE_PLAYER) {
+            return PLAYER_CELL_COLOR;
+        }
+        if (cellState == CELL_STATE_ENEMY) {
+            return ENEMY_CELL_COLOR;
+        }
+        return EMPTY_CELL_COLOR;
+    }
+
+    private String getPaintStateName(int cellState) {
+        if (cellState == CELL_STATE_PLAYER) {
+            return "Player";
+        }
+        if (cellState == CELL_STATE_ENEMY) {
+            return "Enemy";
+        }
+        return "Empty";
     }
 
     private boolean isLeftPressed() {
@@ -339,12 +403,14 @@ public class Main implements ApplicationListener {
         private float y;
         private final float directionX;
         private final float directionY;
+        private final int paintState;
 
-        private Bullet(float x, float y, float directionX, float directionY) {
+        private Bullet(float x, float y, float directionX, float directionY, int paintState) {
             this.x = x;
             this.y = y;
             this.directionX = directionX;
             this.directionY = directionY;
+            this.paintState = paintState;
         }
     }
 }
