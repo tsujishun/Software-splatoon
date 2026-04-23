@@ -18,10 +18,12 @@ public class Main implements ApplicationListener {
     private static final int CELL_STATE_EMPTY = 0;
     private static final int CELL_STATE_PLAYER = 1;
     private static final int CELL_STATE_ENEMY = 2;
+    private static final String GAME_TITLE = "Paint Battle Prototype";
     private static final Color EMPTY_CELL_COLOR = new Color(0.18f, 0.18f, 0.22f, 1f);
     private static final Color PLAYER_CELL_COLOR = new Color(0.25f, 0.7f, 0.95f, 1f);
     private static final Color ENEMY_CELL_COLOR = new Color(0.95f, 0.45f, 0.7f, 1f);
     private static final float GAME_DURATION_SECONDS = 60f;
+    private static final float COUNTDOWN_TOTAL_SECONDS = 4f;
     private static final float PLAYER_SIZE = 32f;
     private static final float PLAYER_SPEED = 220f;
     private static final float ENEMY_SIZE = 30f;
@@ -41,7 +43,13 @@ public class Main implements ApplicationListener {
     private static final float SCORE_TEXT_OFFSET_X = 95f;
     private static final float SCORE_TEXT_OFFSET_Y = -25f;
     private static final float RESTART_TEXT_X = 190f;
-    private static final float RESTART_TEXT_Y = 230f;
+    private static final float RESTART_TEXT_Y = 180f;
+    private static final float TITLE_TEXT_OFFSET_X = 90f;
+    private static final float TITLE_TEXT_OFFSET_Y = 40f;
+    private static final float TITLE_PROMPT_OFFSET_X = 85f;
+    private static final float TITLE_PROMPT_OFFSET_Y = 5f;
+    private static final float COUNTDOWN_TEXT_OFFSET_X = 12f;
+    private static final float COUNTDOWN_TEXT_OFFSET_Y = 0f;
 
     private ShapeRenderer shapeRenderer;
     private SpriteBatch spriteBatch;
@@ -72,6 +80,9 @@ public class Main implements ApplicationListener {
     private String gameResultText = "";
     private int finalPlayerPaintedCellCount;
     private int finalEnemyPaintedCellCount;
+    private boolean titleScreen = true;
+    private boolean countdownActive;
+    private float countdownTimer;
 
     @Override
     public void create() {
@@ -80,7 +91,7 @@ public class Main implements ApplicationListener {
         font = new BitmapFont();
         font.setColor(Color.WHITE);
         resize(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
-        restartGame();
+        goToTitleScreen();
     }
 
     @Override
@@ -116,12 +127,27 @@ public class Main implements ApplicationListener {
         shapeRenderer.setProjectionMatrix(camera.combined);
         spriteBatch.setProjectionMatrix(camera.combined);
 
+        if (titleScreen) {
+            drawTitleScreen();
+            return;
+        }
+
         drawFloorGrid();
         drawActors();
         drawHud();
     }
 
     private void updateGame(float delta) {
+        if (titleScreen) {
+            handleStartFromTitle();
+            return;
+        }
+
+        if (countdownActive) {
+            updateCountdown(delta);
+            return;
+        }
+
         if (gameOver) {
             return;
         }
@@ -139,6 +165,20 @@ public class Main implements ApplicationListener {
         updateBullets(delta);
         handleShooting();
         handleEnemyShooting(delta);
+    }
+
+    private void handleStartFromTitle() {
+        if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER)) {
+            startCountdown();
+        }
+    }
+
+    private void updateCountdown(float delta) {
+        countdownTimer -= delta;
+        if (countdownTimer <= 0f) {
+            countdownTimer = 0f;
+            countdownActive = false;
+        }
     }
 
     private void updatePlayerPosition(float delta) {
@@ -375,6 +415,14 @@ public class Main implements ApplicationListener {
         font.draw(spriteBatch, "Enemy: " + enemyPaintedCellCount, HUD_PADDING, worldHeight - HUD_PADDING - 40f);
         font.draw(spriteBatch, "Color: " + getPaintStateName(currentPaintState), HUD_PADDING, worldHeight - HUD_PADDING - 60f);
         font.draw(spriteBatch, "Time: " + MathUtils.ceil(remainingTime), worldWidth - 90f, worldHeight - HUD_PADDING);
+        if (countdownActive) {
+            font.draw(
+                spriteBatch,
+                getCountdownText(),
+                worldWidth / 2f - COUNTDOWN_TEXT_OFFSET_X,
+                worldHeight / 2f + COUNTDOWN_TEXT_OFFSET_Y
+            );
+        }
         if (gameOver) {
             font.draw(spriteBatch, "Game Over", GAME_OVER_TEXT_X, GAME_OVER_TEXT_Y);
             font.draw(spriteBatch, gameResultText, worldWidth / 2f - RESULT_TEXT_OFFSET_X, worldHeight / 2f + RESULT_TEXT_OFFSET_Y);
@@ -389,6 +437,18 @@ public class Main implements ApplicationListener {
         spriteBatch.end();
     }
 
+    private void drawTitleScreen() {
+        spriteBatch.begin();
+        font.draw(spriteBatch, GAME_TITLE, worldWidth / 2f - TITLE_TEXT_OFFSET_X, worldHeight / 2f + TITLE_TEXT_OFFSET_Y);
+        font.draw(
+            spriteBatch,
+            "Press Enter to Start",
+            worldWidth / 2f - TITLE_PROMPT_OFFSET_X,
+            worldHeight / 2f + TITLE_PROMPT_OFFSET_Y
+        );
+        spriteBatch.end();
+    }
+
     private void handleColorToggle() {
         if (Gdx.input.isKeyJustPressed(Input.Keys.T)) {
             if (currentPaintState == CELL_STATE_PLAYER) {
@@ -400,12 +460,18 @@ public class Main implements ApplicationListener {
     }
 
     private void handleRestart() {
-        if (Gdx.input.isKeyJustPressed(Input.Keys.R)) {
-            restartGame();
+        if (!Gdx.input.isKeyJustPressed(Input.Keys.R) || titleScreen) {
+            return;
+        }
+
+        if (gameOver) {
+            goToTitleScreen();
+        } else {
+            startCountdown();
         }
     }
 
-    private void restartGame() {
+    private void resetMatchState() {
         playerX = (worldWidth - PLAYER_SIZE) / 2f;
         playerY = (worldHeight - PLAYER_SIZE) / 2f;
         facingX = 0f;
@@ -424,8 +490,23 @@ public class Main implements ApplicationListener {
         finalEnemyPaintedCellCount = 0;
     }
 
+    private void goToTitleScreen() {
+        resetMatchState();
+        titleScreen = true;
+        countdownActive = false;
+        countdownTimer = COUNTDOWN_TOTAL_SECONDS;
+    }
+
+    private void startCountdown() {
+        resetMatchState();
+        titleScreen = false;
+        countdownActive = true;
+        countdownTimer = COUNTDOWN_TOTAL_SECONDS;
+    }
+
     private void finishGame() {
         gameOver = true;
+        countdownActive = false;
         bullets.clear();
         finalPlayerPaintedCellCount = playerPaintedCellCount;
         finalEnemyPaintedCellCount = enemyPaintedCellCount;
@@ -438,6 +519,19 @@ public class Main implements ApplicationListener {
         } else {
             gameResultText = "Draw";
         }
+    }
+
+    private String getCountdownText() {
+        if (countdownTimer > 3f) {
+            return "3";
+        }
+        if (countdownTimer > 2f) {
+            return "2";
+        }
+        if (countdownTimer > 1f) {
+            return "1";
+        }
+        return "GO!";
     }
 
     private int getTotalPaintedCellCount() {
