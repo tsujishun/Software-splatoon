@@ -36,6 +36,10 @@ public class Main implements ApplicationListener {
     private static final float HUD_PADDING = 12f;
     private static final float GAME_OVER_TEXT_X = 230f;
     private static final float GAME_OVER_TEXT_Y = 260f;
+    private static final float RESULT_TEXT_OFFSET_X = 50f;
+    private static final float RESULT_TEXT_OFFSET_Y = 0f;
+    private static final float SCORE_TEXT_OFFSET_X = 95f;
+    private static final float SCORE_TEXT_OFFSET_Y = -25f;
     private static final float RESTART_TEXT_X = 190f;
     private static final float RESTART_TEXT_Y = 230f;
 
@@ -65,6 +69,9 @@ public class Main implements ApplicationListener {
     private int currentPaintState;
     private float remainingTime;
     private boolean gameOver;
+    private String gameResultText = "";
+    private int finalPlayerPaintedCellCount;
+    private int finalEnemyPaintedCellCount;
 
     @Override
     public void create() {
@@ -122,8 +129,7 @@ public class Main implements ApplicationListener {
         remainingTime -= delta;
         if (remainingTime <= 0f) {
             remainingTime = 0f;
-            gameOver = true;
-            bullets.clear();
+            finishGame();
             return;
         }
 
@@ -371,6 +377,13 @@ public class Main implements ApplicationListener {
         font.draw(spriteBatch, "Time: " + MathUtils.ceil(remainingTime), worldWidth - 90f, worldHeight - HUD_PADDING);
         if (gameOver) {
             font.draw(spriteBatch, "Game Over", GAME_OVER_TEXT_X, GAME_OVER_TEXT_Y);
+            font.draw(spriteBatch, gameResultText, worldWidth / 2f - RESULT_TEXT_OFFSET_X, worldHeight / 2f + RESULT_TEXT_OFFSET_Y);
+            font.draw(
+                spriteBatch,
+                "Player " + finalPlayerPaintedCellCount + " / Enemy " + finalEnemyPaintedCellCount,
+                worldWidth / 2f - SCORE_TEXT_OFFSET_X,
+                worldHeight / 2f + SCORE_TEXT_OFFSET_Y
+            );
             font.draw(spriteBatch, "Press R to Restart", RESTART_TEXT_X, RESTART_TEXT_Y);
         }
         spriteBatch.end();
@@ -406,6 +419,25 @@ public class Main implements ApplicationListener {
         currentPaintState = CELL_STATE_PLAYER;
         remainingTime = GAME_DURATION_SECONDS;
         gameOver = false;
+        gameResultText = "";
+        finalPlayerPaintedCellCount = 0;
+        finalEnemyPaintedCellCount = 0;
+    }
+
+    private void finishGame() {
+        gameOver = true;
+        bullets.clear();
+        finalPlayerPaintedCellCount = playerPaintedCellCount;
+        finalEnemyPaintedCellCount = enemyPaintedCellCount;
+
+        // Decide the result once at time-up and keep it fixed until restart.
+        if (finalPlayerPaintedCellCount > finalEnemyPaintedCellCount) {
+            gameResultText = "Player Wins";
+        } else if (finalEnemyPaintedCellCount > finalPlayerPaintedCellCount) {
+            gameResultText = "Enemy Wins";
+        } else {
+            gameResultText = "Draw";
+        }
     }
 
     private int getTotalPaintedCellCount() {
