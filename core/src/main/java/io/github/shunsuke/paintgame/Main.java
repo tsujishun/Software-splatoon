@@ -3,8 +3,11 @@ package io.github.shunsuke.paintgame;
 import com.badlogic.gdx.ApplicationListener;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
+import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
+import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.MathUtils;
 
@@ -12,13 +15,22 @@ import java.util.ArrayList;
 
 /** {@link com.badlogic.gdx.ApplicationListener} implementation shared by all platforms. */
 public class Main implements ApplicationListener {
+    private static final float GAME_DURATION_SECONDS = 60f;
     private static final float PLAYER_SIZE = 32f;
     private static final float PLAYER_SPEED = 220f;
     private static final float BULLET_SIZE = 10f;
     private static final float BULLET_SPEED = 360f;
     private static final float FACING_MARKER_SIZE = 8f;
+    private static final float GRID_CELL_SIZE = 32f;
+    private static final float HUD_PADDING = 12f;
+    private static final float GAME_OVER_TEXT_X = 230f;
+    private static final float GAME_OVER_TEXT_Y = 260f;
+    private static final float RESTART_TEXT_X = 190f;
+    private static final float RESTART_TEXT_Y = 230f;
 
     private ShapeRenderer shapeRenderer;
+    private SpriteBatch spriteBatch;
+    private BitmapFont font;
     private OrthographicCamera camera;
     private final ArrayList<Bullet> bullets = new ArrayList<>();
 
@@ -28,14 +40,21 @@ public class Main implements ApplicationListener {
     private float playerY;
     private float facingX = 0f;
     private float facingY = 1f;
+    private int gridColumns;
+    private int gridRows;
+    private boolean[][] paintedCells;
+    private int paintedCellCount;
+    private float remainingTime;
+    private boolean gameOver;
 
     @Override
     public void create() {
         shapeRenderer = new ShapeRenderer();
+        spriteBatch = new SpriteBatch();
+        font = new BitmapFont();
+        font.setColor(Color.WHITE);
         resize(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
-
-        playerX = (worldWidth - PLAYER_SIZE) / 2f;
-        playerY = (worldHeight - PLAYER_SIZE) / 2f;
+        restartGame();
     }
 
     @Override
@@ -53,37 +72,45 @@ public class Main implements ApplicationListener {
             camera = new OrthographicCamera();
         }
         camera.setToOrtho(false, worldWidth, worldHeight);
+
+        initializeFloorGrid();
     }
 
     @Override
     public void render() {
         float delta = Gdx.graphics.getDeltaTime();
 
-        updatePlayerPosition(delta);
-        updateBullets(delta);
-        handleShooting();
+        handleRestart();
+        updateGame(delta);
 
         Gdx.gl.glClearColor(0.12f, 0.12f, 0.16f, 1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
         camera.update();
         shapeRenderer.setProjectionMatrix(camera.combined);
+        spriteBatch.setProjectionMatrix(camera.combined);
 
-        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-        shapeRenderer.setColor(0.18f, 0.18f, 0.22f, 1f);
-        shapeRenderer.rect(0f, 0f, worldWidth, worldHeight);
+        drawFloorGrid();
+        drawActors();
+        drawHud();
+    }
 
-        shapeRenderer.setColor(1f, 0.85f, 0.2f, 1f);
-        for (Bullet bullet : bullets) {
-            shapeRenderer.circle(bullet.x, bullet.y, BULLET_SIZE / 2f);
+    private void updateGame(float delta) {
+        if (gameOver) {
+            return;
         }
 
-        shapeRenderer.setColor(0.2f, 0.8f, 0.9f, 1f);
-        shapeRenderer.rect(playerX, playerY, PLAYER_SIZE, PLAYER_SIZE);
+        remainingTime -= delta;
+        if (remainingTime <= 0f) {
+            remainingTime = 0f;
+            gameOver = true;
+            bullets.clear();
+            return;
+        }
 
-        shapeRenderer.setColor(1f, 1f, 1f, 1f);
-        shapeRenderer.circle(getFacingMarkerX(), getFacingMarkerY(), FACING_MARKER_SIZE / 2f);
-        shapeRenderer.end();
+        updatePlayerPosition(delta);
+        updateBullets(delta);
+        handleShooting();
     }
 
     private void updatePlayerPosition(float delta) {
@@ -136,6 +163,8 @@ public class Main implements ApplicationListener {
             bullet.x += bullet.directionX * BULLET_SPEED * delta;
             bullet.y += bullet.directionY * BULLET_SPEED * delta;
 
+            paintCellAt(bullet.x, bullet.y);
+
             // Remove bullets once they leave the visible play area.
             if (bullet.x + BULLET_SIZE / 2f < 0f
                 || bullet.x - BULLET_SIZE / 2f > worldWidth
@@ -152,6 +181,118 @@ public class Main implements ApplicationListener {
 
     private float getFacingMarkerY() {
         return playerY + PLAYER_SIZE / 2f + facingY * (PLAYER_SIZE / 2f);
+    }
+
+    private void initializeFloorGrid() {
+        gridColumns = Math.max(1, MathUtils.ceil(worldWidth / GRID_CELL_SIZE));
+        gridRows = Math.max(1, MathUtils.ceil(worldHeight / GRID_CELL_SIZE));
+        paintedCells = new boolean[gridRows][gridColumns];
+        paintedCellCount = 0;
+    }
+
+    private void drawFloorGrid() {
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        for (int row = 0; row < gridRows; row++) {
+            for (int column = 0; column < gridColumns; column++) {
+                float cellX = column * GRID_CELL_SIZE;
+                float cellY = row * GRID_CELL_SIZE;
+                float cellWidth = Math.min(GRID_CELL_SIZE, worldWidth - cellX);
+                float cellHeight = Math.min(GRID_CELL_SIZE, worldHeight - cellY);
+
+                if (cellWidth <= 0f || cellHeight <= 0f) {
+                    continue;
+                }
+
+                if (paintedCells[row][column]) {
+                    shapeRenderer.setColor(0.25f, 0.7f, 0.95f, 1f);
+                } else {
+                    shapeRenderer.setColor(0.18f, 0.18f, 0.22f, 1f);
+                }
+                shapeRenderer.rect(cellX, cellY, cellWidth, cellHeight);
+            }
+        }
+        shapeRenderer.end();
+
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
+        shapeRenderer.setColor(0.1f, 0.1f, 0.14f, 1f);
+        for (int row = 0; row < gridRows; row++) {
+            for (int column = 0; column < gridColumns; column++) {
+                float cellX = column * GRID_CELL_SIZE;
+                float cellY = row * GRID_CELL_SIZE;
+                float cellWidth = Math.min(GRID_CELL_SIZE, worldWidth - cellX);
+                float cellHeight = Math.min(GRID_CELL_SIZE, worldHeight - cellY);
+
+                if (cellWidth <= 0f || cellHeight <= 0f) {
+                    continue;
+                }
+
+                shapeRenderer.rect(cellX, cellY, cellWidth, cellHeight);
+            }
+        }
+        shapeRenderer.end();
+    }
+
+    private void drawActors() {
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+
+        shapeRenderer.setColor(1f, 0.85f, 0.2f, 1f);
+        for (Bullet bullet : bullets) {
+            shapeRenderer.circle(bullet.x, bullet.y, BULLET_SIZE / 2f);
+        }
+
+        shapeRenderer.setColor(0.2f, 0.8f, 0.9f, 1f);
+        shapeRenderer.rect(playerX, playerY, PLAYER_SIZE, PLAYER_SIZE);
+
+        shapeRenderer.setColor(1f, 1f, 1f, 1f);
+        shapeRenderer.circle(getFacingMarkerX(), getFacingMarkerY(), FACING_MARKER_SIZE / 2f);
+        shapeRenderer.end();
+    }
+
+    private void paintCellAt(float worldX, float worldY) {
+        if (paintedCells == null || !isInsideWorld(worldX, worldY)) {
+            return;
+        }
+
+        // Convert the bullet position to a row and column in the floor grid.
+        int column = Math.min(gridColumns - 1, (int) (worldX / GRID_CELL_SIZE));
+        int row = Math.min(gridRows - 1, (int) (worldY / GRID_CELL_SIZE));
+        // Count the cell only when its color changes for the first time.
+        if (!paintedCells[row][column]) {
+            paintedCells[row][column] = true;
+            paintedCellCount++;
+        }
+    }
+
+    private boolean isInsideWorld(float worldX, float worldY) {
+        return worldX >= 0f && worldX < worldWidth && worldY >= 0f && worldY < worldHeight;
+    }
+
+    private void drawHud() {
+        spriteBatch.begin();
+        font.draw(spriteBatch, "Painted: " + paintedCellCount, HUD_PADDING, worldHeight - HUD_PADDING);
+        font.draw(spriteBatch, "Time: " + MathUtils.ceil(remainingTime), worldWidth - 90f, worldHeight - HUD_PADDING);
+        if (gameOver) {
+            font.draw(spriteBatch, "Game Over", GAME_OVER_TEXT_X, GAME_OVER_TEXT_Y);
+            font.draw(spriteBatch, "Press R to Restart", RESTART_TEXT_X, RESTART_TEXT_Y);
+        }
+        spriteBatch.end();
+    }
+
+    private void handleRestart() {
+        if (Gdx.input.isKeyJustPressed(Input.Keys.R)) {
+            restartGame();
+        }
+    }
+
+    private void restartGame() {
+        playerX = (worldWidth - PLAYER_SIZE) / 2f;
+        playerY = (worldHeight - PLAYER_SIZE) / 2f;
+        facingX = 0f;
+        facingY = 1f;
+        bullets.clear();
+        initializeFloorGrid();
+        remainingTime = GAME_DURATION_SECONDS;
+        gameOver = false;
     }
 
     private boolean isLeftPressed() {
@@ -184,6 +325,12 @@ public class Main implements ApplicationListener {
     public void dispose() {
         if (shapeRenderer != null) {
             shapeRenderer.dispose();
+        }
+        if (spriteBatch != null) {
+            spriteBatch.dispose();
+        }
+        if (font != null) {
+            font.dispose();
         }
     }
 
