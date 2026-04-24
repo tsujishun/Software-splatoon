@@ -1,7 +1,5 @@
 package io.github.shunsuke.paintgame.threed;
 
-import com.badlogic.gdx.Gdx;
-import com.badlogic.gdx.Input;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.VertexAttributes.Usage;
 import com.badlogic.gdx.graphics.g3d.Environment;
@@ -47,30 +45,13 @@ public class Player3D implements Disposable {
         reset();
     }
 
-    public void update(float delta, FloorGrid3D floorGrid, Vector3 cameraForward, Vector3 cameraRight) {
-        float moveForward = 0f;
-        float moveSide = 0f;
-
-        if (isLeftPressed()) {
-            moveSide -= 1f;
-        }
-        if (isRightPressed()) {
-            moveSide += 1f;
-        }
-        if (isForwardPressed()) {
-            moveForward += 1f;
-        }
-        if (isBackwardPressed()) {
-            moveForward -= 1f;
-        }
-
+    public void update(float delta, FloorGrid3D floorGrid, float moveForward, float moveSide, Vector3 cameraForward, Vector3 cameraRight) {
         if (moveForward != 0f || moveSide != 0f) {
             // Convert keyboard input into a direction based on the camera's horizontal view.
             moveDirection.set(cameraForward).scl(moveForward);
             sideDirection.set(cameraRight).scl(moveSide);
             moveDirection.add(sideDirection).nor();
 
-            facingDirection.set(moveDirection);
             position.x += moveDirection.x * MOVE_SPEED * delta;
             position.z += moveDirection.z * MOVE_SPEED * delta;
         }
@@ -102,6 +83,12 @@ public class Player3D implements Disposable {
         return facingDirection;
     }
 
+    public void setFacingDirection(Vector3 direction) {
+        if (!direction.isZero(0.0001f)) {
+            facingDirection.set(direction).nor();
+        }
+    }
+
     @Override
     public void dispose() {
         model.dispose();
@@ -109,21 +96,5 @@ public class Player3D implements Disposable {
 
     private void updateTransform() {
         instance.transform.setToTranslation(position);
-    }
-
-    private boolean isLeftPressed() {
-        return Gdx.input.isKeyPressed(Input.Keys.LEFT) || Gdx.input.isKeyPressed(Input.Keys.A);
-    }
-
-    private boolean isRightPressed() {
-        return Gdx.input.isKeyPressed(Input.Keys.RIGHT) || Gdx.input.isKeyPressed(Input.Keys.D);
-    }
-
-    private boolean isForwardPressed() {
-        return Gdx.input.isKeyPressed(Input.Keys.UP) || Gdx.input.isKeyPressed(Input.Keys.W);
-    }
-
-    private boolean isBackwardPressed() {
-        return Gdx.input.isKeyPressed(Input.Keys.DOWN) || Gdx.input.isKeyPressed(Input.Keys.S);
     }
 }

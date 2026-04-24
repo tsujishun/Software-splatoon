@@ -14,6 +14,7 @@ import com.badlogic.gdx.graphics.g3d.Environment;
 import com.badlogic.gdx.graphics.g3d.ModelBatch;
 import com.badlogic.gdx.graphics.g3d.attributes.ColorAttribute;
 import com.badlogic.gdx.graphics.g3d.environment.DirectionalLight;
+import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector3;
 
 import java.util.ArrayList;
@@ -26,17 +27,23 @@ import java.util.Iterator;
 public class Main3D implements ApplicationListener {
     private static final String TITLE_TEXT = "Paint Battle 3D Prototype";
     private static final String TITLE_PROMPT_TEXT = "Press Enter to Start";
-    private static final String STEP_TEXT = "Step 4.5: Basic Weapon Parameters";
-    private static final String PLAY_TEXT = "WASD / Arrows: Move relative to the camera";
-    private static final String SHOOT_TEXT = "Space: Shoot in the facing direction";
+    private static final String STEP_TEXT = "Step 2.7: Separate Camera and Movement";
+    private static final String PLAY_TEXT = "WASD: Move relative to the camera";
+    private static final String CAMERA_CONTROL_TEXT = "Move the mouse to control the camera";
+    private static final String SHOOT_TEXT = "Space: Shoot in the camera direction";
     private static final String PAINT_TEXT = "Basic Shooter paints floor tiles as bullets move";
     private static final String RETURN_TEXT = "Press R to return to the title screen";
     private static final float COUNTDOWN_TOTAL_SECONDS = 4f;
     private static final float CAMERA_DISTANCE = 4.5f;
-    private static final float CAMERA_HEIGHT = 2.4f;
     private static final float CAMERA_LOOK_HEIGHT = 0.4f;
     private static final float CAMERA_LOOK_AHEAD = 0.8f;
     private static final float CAMERA_FOLLOW_SPEED = 6f;
+    private static final float CAMERA_DEFAULT_YAW = 0f;
+    private static final float CAMERA_DEFAULT_PITCH = -26f;
+    private static final float CAMERA_MOUSE_SENSITIVITY_X = 0.22f;
+    private static final float CAMERA_MOUSE_SENSITIVITY_Y = 0.18f;
+    private static final float CAMERA_MIN_PITCH = -60f;
+    private static final float CAMERA_MAX_PITCH = -15f;
     private static final Color CLEAR_COLOR = new Color(0.08f, 0.1f, 0.14f, 1f);
 
     private ModelBatch modelBatch;
@@ -50,6 +57,7 @@ public class Main3D implements ApplicationListener {
     private Player3D player;
     private final ArrayList<Bullet3D> bullets = new ArrayList<>();
     private final Vector3 cameraTarget = new Vector3();
+    private final Vector3 cameraDirection = new Vector3();
     private final Vector3 cameraMoveForward = new Vector3();
     private final Vector3 cameraMoveRight = new Vector3();
     private final Vector3 desiredCameraPosition = new Vector3();
@@ -59,6 +67,8 @@ public class Main3D implements ApplicationListener {
     private float countdownTimer;
     private WeaponConfig3D playerWeapon;
     private float fireCooldownRemaining;
+    private float cameraYaw;
+    private float cameraPitch;
 
     @Override
     public void create() {
@@ -78,6 +88,7 @@ public class Main3D implements ApplicationListener {
         flowState = GameFlowState.TITLE;
         countdownTimer = COUNTDOWN_TOTAL_SECONDS;
         fireCooldownRemaining = 0f;
+        resetCameraAngles();
 
         resize(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
     }
@@ -111,6 +122,7 @@ public class Main3D implements ApplicationListener {
 
         handleGlobalInput();
         updateFlow(delta);
+        updateMouseCapture();
 
         Gdx.gl.glViewport(0, 0, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
         Gdx.gl.glEnable(GL20.GL_DEPTH_TEST);
@@ -186,8 +198,10 @@ public class Main3D implements ApplicationListener {
         }
 
         if (flowState == GameFlowState.PLAYING) {
+            updateCameraControl();
             updateCameraMovementBasis();
-            player.update(delta, floorGrid, cameraMoveForward, cameraMoveRight);
+            player.setFacingDirection(cameraMoveForward);
+            player.update(delta, floorGrid, getMoveForwardInput(), getMoveSideInput(), cameraMoveForward, cameraMoveRight);
             fireCooldownRemaining = Math.max(0f, fireCooldownRemaining - delta);
             handleShootingInput();
             updateBullets(delta);
@@ -209,20 +223,25 @@ public class Main3D implements ApplicationListener {
         } else if (flowState == GameFlowState.PLAYING) {
             drawTopLeftText(STEP_TEXT, 12f, hudCamera.viewportHeight - 12f);
             drawTopLeftText(PLAY_TEXT, 12f, hudCamera.viewportHeight - 34f);
-            drawTopLeftText(SHOOT_TEXT, 12f, hudCamera.viewportHeight - 56f);
-            drawTopLeftText(PAINT_TEXT, 12f, hudCamera.viewportHeight - 78f);
-            drawTopLeftText("Weapon: " + playerWeapon.getName(), 12f, hudCamera.viewportHeight - 100f);
-            drawTopLeftText("Move Speed: " + Player3D.MOVE_SPEED, 12f, hudCamera.viewportHeight - 122f);
-            drawTopLeftText("Range: " + playerWeapon.getRange() + "  Bullet Speed: " + playerWeapon.getBulletSpeed(), 12f, hudCamera.viewportHeight - 144f);
-            drawTopLeftText("Paint Radius: " + playerWeapon.getPaintRadius() + "  Fire Interval: " + playerWeapon.getFireInterval(), 12f, hudCamera.viewportHeight - 166f);
-            drawTopLeftText("Bullets: " + bullets.size(), 12f, hudCamera.viewportHeight - 188f);
-            drawTopLeftText("Camera: third-person follow", 12f, hudCamera.viewportHeight - 210f);
-            drawTopLeftText(RETURN_TEXT, 12f, hudCamera.viewportHeight - 232f);
-            drawTopLeftText("Tiles: " + (int) floorGrid.getWorldWidth() + " x " + (int) floorGrid.getWorldDepth(), 12f, hudCamera.viewportHeight - 254f);
+            drawTopLeftText(CAMERA_CONTROL_TEXT, 12f, hudCamera.viewportHeight - 56f);
+            drawTopLeftText(SHOOT_TEXT, 12f, hudCamera.viewportHeight - 78f);
+            drawTopLeftText(PAINT_TEXT, 12f, hudCamera.viewportHeight - 100f);
+            drawTopLeftText("Weapon: " + playerWeapon.getName(), 12f, hudCamera.viewportHeight - 122f);
+            drawTopLeftText("Move Speed: " + Player3D.MOVE_SPEED, 12f, hudCamera.viewportHeight - 144f);
+            drawTopLeftText("Range: " + playerWeapon.getRange() + "  Bullet Speed: " + playerWeapon.getBulletSpeed(), 12f, hudCamera.viewportHeight - 166f);
+            drawTopLeftText("Paint Radius: " + playerWeapon.getPaintRadius() + "  Fire Interval: " + playerWeapon.getFireInterval(), 12f, hudCamera.viewportHeight - 188f);
+            drawTopLeftText("Bullets: " + bullets.size(), 12f, hudCamera.viewportHeight - 210f);
+            drawTopLeftText(
+                String.format("Camera Yaw: %.0f  Pitch: %.0f", cameraYaw, cameraPitch),
+                12f,
+                hudCamera.viewportHeight - 232f
+            );
+            drawTopLeftText("Camera: third-person follow", 12f, hudCamera.viewportHeight - 254f);
+            drawTopLeftText(RETURN_TEXT, 12f, hudCamera.viewportHeight - 276f);
             drawTopLeftText(
                 String.format("Player Position: %.1f, %.1f", player.getPosition().x, player.getPosition().z),
                 12f,
-                hudCamera.viewportHeight - 276f
+                hudCamera.viewportHeight - 298f
             );
         }
 
@@ -246,6 +265,7 @@ public class Main3D implements ApplicationListener {
         flowState = GameFlowState.TITLE;
         countdownTimer = COUNTDOWN_TOTAL_SECONDS;
         fireCooldownRemaining = 0f;
+        resetCameraAngles();
         snapCameraToPlayer();
     }
 
@@ -256,6 +276,7 @@ public class Main3D implements ApplicationListener {
         flowState = GameFlowState.COUNTDOWN;
         countdownTimer = COUNTDOWN_TOTAL_SECONDS;
         fireCooldownRemaining = 0f;
+        resetCameraAngles();
         snapCameraToPlayer();
     }
 
@@ -280,6 +301,16 @@ public class Main3D implements ApplicationListener {
         cameraTarget.lerp(desiredCameraTarget, followAlpha);
         worldCamera.up.set(Vector3.Y);
         worldCamera.lookAt(cameraTarget);
+    }
+
+    private void updateCameraControl() {
+        cameraYaw += Gdx.input.getDeltaX() * CAMERA_MOUSE_SENSITIVITY_X;
+        cameraPitch -= Gdx.input.getDeltaY() * CAMERA_MOUSE_SENSITIVITY_Y;
+        cameraPitch = MathUtils.clamp(cameraPitch, CAMERA_MIN_PITCH, CAMERA_MAX_PITCH);
+    }
+
+    private void updateMouseCapture() {
+        Gdx.input.setCursorCatched(flowState == GameFlowState.PLAYING);
     }
 
     private void handleShootingInput() {
@@ -315,14 +346,20 @@ public class Main3D implements ApplicationListener {
     }
 
     private void updateCameraMovementBasis() {
+        float cosPitch = MathUtils.cosDeg(cameraPitch);
+        cameraDirection.set(
+            MathUtils.sinDeg(cameraYaw) * cosPitch,
+            MathUtils.sinDeg(cameraPitch),
+            -MathUtils.cosDeg(cameraYaw) * cosPitch
+        ).nor();
+
         // Ignore the camera's vertical tilt so movement stays on the floor plane.
-        cameraMoveForward.set(worldCamera.direction.x, 0f, worldCamera.direction.z);
+        cameraMoveForward.set(cameraDirection.x, 0f, cameraDirection.z);
         if (cameraMoveForward.isZero(0.0001f)) {
-            cameraMoveForward.set(player.getFacingDirection());
+            cameraMoveForward.set(0f, 0f, -1f);
         } else {
             cameraMoveForward.nor();
         }
-
         cameraMoveRight.set(cameraMoveForward).crs(Vector3.Y).nor();
     }
 
@@ -336,18 +373,40 @@ public class Main3D implements ApplicationListener {
 
     private void calculateDesiredCamera() {
         Vector3 playerPosition = player.getPosition();
-        Vector3 facingDirection = player.getFacingDirection();
-
         desiredCameraPosition.set(
-            playerPosition.x - facingDirection.x * CAMERA_DISTANCE,
-            playerPosition.y + CAMERA_HEIGHT,
-            playerPosition.z - facingDirection.z * CAMERA_DISTANCE
-        );
-
-        desiredCameraTarget.set(
-            playerPosition.x + facingDirection.x * CAMERA_LOOK_AHEAD,
+            playerPosition.x + cameraMoveForward.x * CAMERA_LOOK_AHEAD,
             playerPosition.y + CAMERA_LOOK_HEIGHT,
-            playerPosition.z + facingDirection.z * CAMERA_LOOK_AHEAD
+            playerPosition.z + cameraMoveForward.z * CAMERA_LOOK_AHEAD
         );
+        desiredCameraTarget.set(desiredCameraPosition);
+        desiredCameraPosition.mulAdd(cameraDirection, -CAMERA_DISTANCE);
+    }
+
+    private void resetCameraAngles() {
+        cameraYaw = CAMERA_DEFAULT_YAW;
+        cameraPitch = CAMERA_DEFAULT_PITCH;
+        updateCameraMovementBasis();
+    }
+
+    private float getMoveForwardInput() {
+        float moveForward = 0f;
+        if (Gdx.input.isKeyPressed(Input.Keys.W)) {
+            moveForward += 1f;
+        }
+        if (Gdx.input.isKeyPressed(Input.Keys.S)) {
+            moveForward -= 1f;
+        }
+        return moveForward;
+    }
+
+    private float getMoveSideInput() {
+        float moveSide = 0f;
+        if (Gdx.input.isKeyPressed(Input.Keys.A)) {
+            moveSide -= 1f;
+        }
+        if (Gdx.input.isKeyPressed(Input.Keys.D)) {
+            moveSide += 1f;
+        }
+        return moveSide;
     }
 }
