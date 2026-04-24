@@ -14,6 +14,7 @@ import com.badlogic.gdx.graphics.g3d.Environment;
 import com.badlogic.gdx.graphics.g3d.ModelBatch;
 import com.badlogic.gdx.graphics.g3d.attributes.ColorAttribute;
 import com.badlogic.gdx.graphics.g3d.environment.DirectionalLight;
+import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector3;
 
@@ -53,6 +54,10 @@ public class Main3D implements ApplicationListener {
     private static final float CAMERA_MOUSE_SENSITIVITY_Y = 0.18f;
     private static final float CAMERA_MIN_PITCH = -60f;
     private static final float CAMERA_MAX_PITCH = -15f;
+    private static final float CROSSHAIR_GAP = 5f;
+    private static final float CROSSHAIR_ARM_LENGTH = 10f;
+    private static final float CROSSHAIR_CENTER_RADIUS = 2f;
+    private static final Color CROSSHAIR_COLOR = new Color(1f, 1f, 1f, 0.9f);
     private static final Color CLEAR_COLOR = new Color(0.08f, 0.1f, 0.14f, 1f);
 
     private ModelBatch modelBatch;
@@ -60,6 +65,7 @@ public class Main3D implements ApplicationListener {
     private PerspectiveCamera worldCamera;
     private OrthographicCamera hudCamera;
     private SpriteBatch spriteBatch;
+    private ShapeRenderer shapeRenderer;
     private BitmapFont font;
     private GlyphLayout glyphLayout;
     private FloorGrid3D floorGrid;
@@ -95,6 +101,7 @@ public class Main3D implements ApplicationListener {
     public void create() {
         modelBatch = new ModelBatch();
         spriteBatch = new SpriteBatch();
+        shapeRenderer = new ShapeRenderer();
         font = new BitmapFont();
         font.setColor(Color.WHITE);
         glyphLayout = new GlyphLayout();
@@ -169,9 +176,11 @@ public class Main3D implements ApplicationListener {
         }
         modelBatch.end();
 
+        Gdx.gl.glDisable(GL20.GL_DEPTH_TEST);
         hudCamera.update();
         spriteBatch.setProjectionMatrix(hudCamera.combined);
         drawOverlay();
+        drawCrosshair();
     }
 
     @Override
@@ -191,6 +200,9 @@ public class Main3D implements ApplicationListener {
         }
         if (spriteBatch != null) {
             spriteBatch.dispose();
+        }
+        if (shapeRenderer != null) {
+            shapeRenderer.dispose();
         }
         if (font != null) {
             font.dispose();
@@ -370,6 +382,25 @@ public class Main3D implements ApplicationListener {
         font.draw(spriteBatch, text, x, y);
     }
 
+    private void drawCrosshair() {
+        if (flowState != GameFlowState.PLAYING) {
+            return;
+        }
+
+        float centerX = hudCamera.viewportWidth / 2f;
+        float centerY = hudCamera.viewportHeight / 2f;
+
+        shapeRenderer.setProjectionMatrix(hudCamera.combined);
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
+        shapeRenderer.setColor(CROSSHAIR_COLOR);
+        shapeRenderer.line(centerX - CROSSHAIR_GAP - CROSSHAIR_ARM_LENGTH, centerY, centerX - CROSSHAIR_GAP, centerY);
+        shapeRenderer.line(centerX + CROSSHAIR_GAP, centerY, centerX + CROSSHAIR_GAP + CROSSHAIR_ARM_LENGTH, centerY);
+        shapeRenderer.line(centerX, centerY - CROSSHAIR_GAP - CROSSHAIR_ARM_LENGTH, centerX, centerY - CROSSHAIR_GAP);
+        shapeRenderer.line(centerX, centerY + CROSSHAIR_GAP, centerX, centerY + CROSSHAIR_GAP + CROSSHAIR_ARM_LENGTH);
+        shapeRenderer.circle(centerX, centerY, CROSSHAIR_CENTER_RADIUS);
+        shapeRenderer.end();
+    }
+
     private void goToTitleScreen() {
         floorGrid.reset();
         player.reset();
@@ -485,7 +516,7 @@ public class Main3D implements ApplicationListener {
     private void handleShootingInput() {
         // Holding Space should keep firing at the weapon's configured interval.
         while (Gdx.input.isKeyPressed(Input.Keys.SPACE) && fireCooldownRemaining <= 0f) {
-            bullets.add(new Bullet3D(player.getPosition(), player.getFacingDirection(), playerWeapon, getPlayerPaintCellState()));
+            bullets.add(new Bullet3D(player.getPosition(), cameraMoveForward, playerWeapon, getPlayerPaintCellState()));
             fireCooldownRemaining += playerWeapon.getFireInterval();
         }
     }

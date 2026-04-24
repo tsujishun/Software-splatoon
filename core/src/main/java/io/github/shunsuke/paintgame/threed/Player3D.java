@@ -20,9 +20,9 @@ import com.badlogic.gdx.utils.Disposable;
 public class Player3D implements Disposable {
     public static final float MOVE_SPEED = 4.5f;
 
-    private static final float PLAYER_WIDTH = 0.6f;
+    private static final float PLAYER_WIDTH = 0.52f;
     private static final float PLAYER_HEIGHT = 0.9f;
-    private static final float PLAYER_DEPTH = 0.6f;
+    private static final float PLAYER_DEPTH = 0.78f;
     private static final Color PLAYER_COLOR = new Color(0.25f, 0.7f, 0.95f, 1f);
 
     private final Model model;
@@ -95,6 +95,9 @@ public class Player3D implements Disposable {
     }
 
     private void updateTransform() {
-        instance.transform.setToTranslation(position);
+        float facingAngleDegrees = MathUtils.atan2(facingDirection.x, -facingDirection.z) * MathUtils.radiansToDegrees;
+        instance.transform.idt();
+        instance.transform.translate(position);
+        instance.transform.rotate(Vector3.Y, facingAngleDegrees);
     }
 }

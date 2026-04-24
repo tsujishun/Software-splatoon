@@ -19,8 +19,8 @@ import com.badlogic.gdx.utils.Disposable;
  */
 public class Bullet3D implements Disposable {
     private static final float SIZE = 0.18f;
-    private static final float HEIGHT = 0.25f;
-    private static final float SPAWN_FORWARD_OFFSET = 0.55f;
+    private static final float SPAWN_HEIGHT_OFFSET = 0.12f;
+    private static final float SPAWN_FORWARD_OFFSET = 0.65f;
     private static final Color PLAYER_BULLET_COLOR = new Color(0.25f, 0.7f, 0.95f, 1f);
     private static final Color ENEMY_BULLET_COLOR = new Color(0.95f, 0.45f, 0.7f, 1f);
     private static final Color DEFAULT_BULLET_COLOR = new Color(1f, 0.82f, 0.25f, 1f);
@@ -47,10 +47,16 @@ public class Bullet3D implements Disposable {
         this.weaponConfig = weaponConfig;
         this.paintCellState = paintCellState;
 
-        direction.set(facingDirection).nor();
+        // Only use the horizontal part of the aim so the bullet stays on the floor plane for now.
+        direction.set(facingDirection.x, 0f, facingDirection.z);
+        if (direction.isZero(0.0001f)) {
+            direction.set(0f, 0f, -1f);
+        } else {
+            direction.nor();
+        }
         position.set(
             playerPosition.x + direction.x * SPAWN_FORWARD_OFFSET,
-            HEIGHT,
+            playerPosition.y + SPAWN_HEIGHT_OFFSET,
             playerPosition.z + direction.z * SPAWN_FORWARD_OFFSET
         );
         updateTransform();
