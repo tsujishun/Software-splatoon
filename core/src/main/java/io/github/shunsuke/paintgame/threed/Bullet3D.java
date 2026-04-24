@@ -21,27 +21,31 @@ public class Bullet3D implements Disposable {
     private static final float SIZE = 0.18f;
     private static final float HEIGHT = 0.25f;
     private static final float SPAWN_FORWARD_OFFSET = 0.55f;
-    private static final Color BULLET_COLOR = new Color(1f, 0.82f, 0.25f, 1f);
+    private static final Color PLAYER_BULLET_COLOR = new Color(0.25f, 0.7f, 0.95f, 1f);
+    private static final Color ENEMY_BULLET_COLOR = new Color(0.95f, 0.45f, 0.7f, 1f);
+    private static final Color DEFAULT_BULLET_COLOR = new Color(1f, 0.82f, 0.25f, 1f);
 
     private final Model model;
     private final ModelInstance instance;
     private final Vector3 position = new Vector3();
     private final Vector3 direction = new Vector3();
     private final WeaponConfig3D weaponConfig;
+    private final int paintCellState;
 
     private float traveledDistance;
 
-    public Bullet3D(Vector3 playerPosition, Vector3 facingDirection, WeaponConfig3D weaponConfig) {
+    public Bullet3D(Vector3 playerPosition, Vector3 facingDirection, WeaponConfig3D weaponConfig, int paintCellState) {
         ModelBuilder modelBuilder = new ModelBuilder();
         model = modelBuilder.createBox(
             SIZE,
             SIZE,
             SIZE,
-            new Material(ColorAttribute.createDiffuse(BULLET_COLOR)),
+            new Material(ColorAttribute.createDiffuse(getBulletColor(paintCellState))),
             Usage.Position | Usage.Normal
         );
         instance = new ModelInstance(model);
         this.weaponConfig = weaponConfig;
+        this.paintCellState = paintCellState;
 
         direction.set(facingDirection).nor();
         position.set(
@@ -96,10 +100,20 @@ public class Bullet3D implements Disposable {
     }
 
     private void paintCurrentTile(FloorGrid3D floorGrid) {
-        floorGrid.paintAtWorldPosition(position.x, position.z, weaponConfig.getPaintRadius(), FloorGrid3D.CELL_STATE_PLAYER);
+        floorGrid.paintAtWorldPosition(position.x, position.z, weaponConfig.getPaintRadius(), paintCellState);
     }
 
     private void updateTransform() {
         instance.transform.setToTranslation(position);
+    }
+
+    private Color getBulletColor(int cellState) {
+        if (cellState == FloorGrid3D.CELL_STATE_PLAYER) {
+            return PLAYER_BULLET_COLOR;
+        }
+        if (cellState == FloorGrid3D.CELL_STATE_ENEMY) {
+            return ENEMY_BULLET_COLOR;
+        }
+        return DEFAULT_BULLET_COLOR;
     }
 }

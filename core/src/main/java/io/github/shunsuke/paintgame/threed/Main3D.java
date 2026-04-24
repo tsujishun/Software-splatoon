@@ -27,11 +27,11 @@ import java.util.Iterator;
 public class Main3D implements ApplicationListener {
     private static final String TITLE_TEXT = "Paint Battle 3D Prototype";
     private static final String TITLE_PROMPT_TEXT = "Press Enter to Start";
-    private static final String STEP_TEXT = "Step 6: 3D Timer and Game Over";
+    private static final String STEP_TEXT = "Step 7: 3D Dual-Color Paint";
     private static final String PLAY_TEXT = "WASD: Move relative to the camera";
     private static final String CAMERA_CONTROL_TEXT = "Move the mouse to control the camera";
     private static final String SHOOT_TEXT = "Space: Shoot in the camera direction";
-    private static final String PAINT_TEXT = "Basic Shooter paints floor tiles as bullets move";
+    private static final String PAINT_TEXT = "T: Switch paint color between Player and Enemy";
     private static final String RETURN_TEXT = "Press R to return to the title screen";
     private static final float COUNTDOWN_TOTAL_SECONDS = 4f;
     private static final float GAME_DURATION_SECONDS = 60f;
@@ -72,6 +72,7 @@ public class Main3D implements ApplicationListener {
     private float cameraYaw;
     private float cameraPitch;
     private boolean mouseCaptured;
+    private int currentPaintCellState;
 
     @Override
     public void create() {
@@ -93,6 +94,7 @@ public class Main3D implements ApplicationListener {
         remainingTime = GAME_DURATION_SECONDS;
         fireCooldownRemaining = 0f;
         mouseCaptured = false;
+        currentPaintCellState = FloorGrid3D.CELL_STATE_PLAYER;
         resetCameraAngles();
         setMouseCapture(false);
 
@@ -215,6 +217,7 @@ public class Main3D implements ApplicationListener {
             player.setFacingDirection(cameraMoveForward);
             player.update(delta, floorGrid, getMoveForwardInput(), getMoveSideInput(), cameraMoveForward, cameraMoveRight);
             fireCooldownRemaining = Math.max(0f, fireCooldownRemaining - delta);
+            handlePaintColorToggle();
             handleShootingInput();
             updateBullets(delta);
         }
@@ -238,32 +241,38 @@ public class Main3D implements ApplicationListener {
             drawTopLeftText(CAMERA_CONTROL_TEXT, 12f, hudCamera.viewportHeight - 56f);
             drawTopLeftText(SHOOT_TEXT, 12f, hudCamera.viewportHeight - 78f);
             drawTopLeftText(PAINT_TEXT, 12f, hudCamera.viewportHeight - 100f);
-            drawTopLeftText("Painted: " + floorGrid.getPaintedCellCount(), 12f, hudCamera.viewportHeight - 122f);
-            drawTopLeftText("Total: " + floorGrid.getTotalCellCount(), 12f, hudCamera.viewportHeight - 144f);
-            drawTopLeftText(String.format("Paint Rate: %.1f%%", floorGrid.getPaintRatePercent()), 12f, hudCamera.viewportHeight - 166f);
-            drawTopLeftText("Weapon: " + playerWeapon.getName(), 12f, hudCamera.viewportHeight - 188f);
-            drawTopLeftText("Move Speed: " + Player3D.MOVE_SPEED, 12f, hudCamera.viewportHeight - 210f);
-            drawTopLeftText("Range: " + playerWeapon.getRange() + "  Bullet Speed: " + playerWeapon.getBulletSpeed(), 12f, hudCamera.viewportHeight - 232f);
-            drawTopLeftText("Paint Radius: " + playerWeapon.getPaintRadius() + "  Fire Interval: " + playerWeapon.getFireInterval(), 12f, hudCamera.viewportHeight - 254f);
-            drawTopLeftText("Bullets: " + bullets.size(), 12f, hudCamera.viewportHeight - 276f);
+            drawTopLeftText("Player: " + floorGrid.getPlayerPaintedCellCount(), 12f, hudCamera.viewportHeight - 122f);
+            drawTopLeftText("Enemy: " + floorGrid.getEnemyPaintedCellCount(), 12f, hudCamera.viewportHeight - 144f);
+            drawTopLeftText("Total: " + floorGrid.getTotalCellCount(), 12f, hudCamera.viewportHeight - 166f);
+            drawTopLeftText(String.format("Player Paint Rate: %.1f%%", floorGrid.getPlayerPaintRatePercent()), 12f, hudCamera.viewportHeight - 188f);
+            drawTopLeftText(String.format("Enemy Paint Rate: %.1f%%", floorGrid.getEnemyPaintRatePercent()), 12f, hudCamera.viewportHeight - 210f);
+            drawTopLeftText("Current Color: " + getCurrentPaintColorLabel(), 12f, hudCamera.viewportHeight - 232f);
+            drawTopLeftText("Weapon: " + playerWeapon.getName(), 12f, hudCamera.viewportHeight - 254f);
+            drawTopLeftText("Move Speed: " + Player3D.MOVE_SPEED, 12f, hudCamera.viewportHeight - 276f);
+            drawTopLeftText("Range: " + playerWeapon.getRange() + "  Bullet Speed: " + playerWeapon.getBulletSpeed(), 12f, hudCamera.viewportHeight - 298f);
+            drawTopLeftText("Paint Radius: " + playerWeapon.getPaintRadius() + "  Fire Interval: " + playerWeapon.getFireInterval(), 12f, hudCamera.viewportHeight - 320f);
+            drawTopLeftText("Bullets: " + bullets.size(), 12f, hudCamera.viewportHeight - 342f);
             drawTopLeftText(
                 String.format("Camera Yaw: %.0f  Pitch: %.0f", cameraYaw, cameraPitch),
                 12f,
-                hudCamera.viewportHeight - 298f
+                hudCamera.viewportHeight - 364f
             );
-            drawTopLeftText("Camera: third-person follow", 12f, hudCamera.viewportHeight - 320f);
-            drawTopLeftText(RETURN_TEXT, 12f, hudCamera.viewportHeight - 342f);
+            drawTopLeftText("Camera: third-person follow", 12f, hudCamera.viewportHeight - 386f);
+            drawTopLeftText(RETURN_TEXT, 12f, hudCamera.viewportHeight - 408f);
             drawTopLeftText(
                 String.format("Player Position: %.1f, %.1f", player.getPosition().x, player.getPosition().z),
                 12f,
-                hudCamera.viewportHeight - 364f
+                hudCamera.viewportHeight - 430f
             );
             drawTopLeftText(String.format("Time: %d", (int) Math.ceil(remainingTime)), hudCamera.viewportWidth - 120f, hudCamera.viewportHeight - 12f);
         } else if (flowState == GameFlowState.GAME_OVER) {
             drawTopLeftText(STEP_TEXT, 12f, hudCamera.viewportHeight - 12f);
-            drawTopLeftText("Painted: " + floorGrid.getPaintedCellCount(), 12f, hudCamera.viewportHeight - 34f);
-            drawTopLeftText("Total: " + floorGrid.getTotalCellCount(), 12f, hudCamera.viewportHeight - 56f);
-            drawTopLeftText(String.format("Paint Rate: %.1f%%", floorGrid.getPaintRatePercent()), 12f, hudCamera.viewportHeight - 78f);
+            drawTopLeftText("Player: " + floorGrid.getPlayerPaintedCellCount(), 12f, hudCamera.viewportHeight - 34f);
+            drawTopLeftText("Enemy: " + floorGrid.getEnemyPaintedCellCount(), 12f, hudCamera.viewportHeight - 56f);
+            drawTopLeftText("Total: " + floorGrid.getTotalCellCount(), 12f, hudCamera.viewportHeight - 78f);
+            drawTopLeftText(String.format("Player Paint Rate: %.1f%%", floorGrid.getPlayerPaintRatePercent()), 12f, hudCamera.viewportHeight - 100f);
+            drawTopLeftText(String.format("Enemy Paint Rate: %.1f%%", floorGrid.getEnemyPaintRatePercent()), 12f, hudCamera.viewportHeight - 122f);
+            drawTopLeftText("Current Color: " + getCurrentPaintColorLabel(), 12f, hudCamera.viewportHeight - 144f);
             drawTopLeftText("Time: 0", hudCamera.viewportWidth - 120f, hudCamera.viewportHeight - 12f);
             drawCenteredText("Game Over", hudCamera.viewportHeight / 2f + 18f);
             drawCenteredText("Press R to return to the title screen", hudCamera.viewportHeight / 2f - 18f);
@@ -290,6 +299,7 @@ public class Main3D implements ApplicationListener {
         countdownTimer = COUNTDOWN_TOTAL_SECONDS;
         remainingTime = GAME_DURATION_SECONDS;
         fireCooldownRemaining = 0f;
+        currentPaintCellState = FloorGrid3D.CELL_STATE_PLAYER;
         resetCameraAngles();
         setMouseCapture(false);
         snapCameraToPlayer();
@@ -303,6 +313,7 @@ public class Main3D implements ApplicationListener {
         countdownTimer = COUNTDOWN_TOTAL_SECONDS;
         remainingTime = GAME_DURATION_SECONDS;
         fireCooldownRemaining = 0f;
+        currentPaintCellState = FloorGrid3D.CELL_STATE_PLAYER;
         resetCameraAngles();
         setMouseCapture(false);
         snapCameraToPlayer();
@@ -359,10 +370,20 @@ public class Main3D implements ApplicationListener {
         }
     }
 
+    private void handlePaintColorToggle() {
+        if (Gdx.input.isKeyJustPressed(Input.Keys.T)) {
+            if (currentPaintCellState == FloorGrid3D.CELL_STATE_PLAYER) {
+                currentPaintCellState = FloorGrid3D.CELL_STATE_ENEMY;
+            } else {
+                currentPaintCellState = FloorGrid3D.CELL_STATE_PLAYER;
+            }
+        }
+    }
+
     private void handleShootingInput() {
         // Holding Space should keep firing at the weapon's configured interval.
         while (Gdx.input.isKeyPressed(Input.Keys.SPACE) && fireCooldownRemaining <= 0f) {
-            bullets.add(new Bullet3D(player.getPosition(), player.getFacingDirection(), playerWeapon));
+            bullets.add(new Bullet3D(player.getPosition(), player.getFacingDirection(), playerWeapon, currentPaintCellState));
             fireCooldownRemaining += playerWeapon.getFireInterval();
         }
     }
@@ -454,5 +475,12 @@ public class Main3D implements ApplicationListener {
             moveSide += 1f;
         }
         return moveSide;
+    }
+
+    private String getCurrentPaintColorLabel() {
+        if (currentPaintCellState == FloorGrid3D.CELL_STATE_ENEMY) {
+            return "Enemy";
+        }
+        return "Player";
     }
 }

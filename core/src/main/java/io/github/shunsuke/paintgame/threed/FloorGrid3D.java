@@ -147,6 +147,24 @@ public class FloorGrid3D implements Disposable {
         return getPaintedCellCount() * 100f / totalCellCount;
     }
 
+    public float getPlayerPaintRatePercent() {
+        int totalCellCount = getTotalCellCount();
+        if (totalCellCount <= 0) {
+            return 0f;
+        }
+
+        return playerPaintedCellCount * 100f / totalCellCount;
+    }
+
+    public float getEnemyPaintRatePercent() {
+        int totalCellCount = getTotalCellCount();
+        if (totalCellCount <= 0) {
+            return 0f;
+        }
+
+        return enemyPaintedCellCount * 100f / totalCellCount;
+    }
+
     public float getWorldWidth() {
         return columns * TILE_SIZE;
     }
