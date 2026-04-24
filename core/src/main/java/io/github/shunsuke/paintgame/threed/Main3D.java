@@ -16,6 +16,9 @@ import com.badlogic.gdx.graphics.g3d.attributes.ColorAttribute;
 import com.badlogic.gdx.graphics.g3d.environment.DirectionalLight;
 import com.badlogic.gdx.math.Vector3;
 
+import java.util.ArrayList;
+import java.util.Iterator;
+
 /**
  * Separate 3D entry point.
  * This keeps the finished 2D prototype intact while we build the 3D version in small steps.
@@ -23,8 +26,9 @@ import com.badlogic.gdx.math.Vector3;
 public class Main3D implements ApplicationListener {
     private static final String TITLE_TEXT = "Paint Battle 3D Prototype";
     private static final String TITLE_PROMPT_TEXT = "Press Enter to Start";
-    private static final String STEP_TEXT = "Step 2: 3D Player Movement";
+    private static final String STEP_TEXT = "Step 3: 3D Shooting";
     private static final String PLAY_TEXT = "WASD / Arrows: Move relative to the camera";
+    private static final String SHOOT_TEXT = "Space: Shoot in the facing direction";
     private static final String RETURN_TEXT = "Press R to return to the title screen";
     private static final float COUNTDOWN_TOTAL_SECONDS = 4f;
     private static final float CAMERA_DISTANCE = 4.5f;
@@ -43,6 +47,7 @@ public class Main3D implements ApplicationListener {
     private GlyphLayout glyphLayout;
     private FloorGrid3D floorGrid;
     private Player3D player;
+    private final ArrayList<Bullet3D> bullets = new ArrayList<>();
     private final Vector3 cameraTarget = new Vector3();
     private final Vector3 cameraMoveForward = new Vector3();
     private final Vector3 cameraMoveRight = new Vector3();
@@ -111,6 +116,7 @@ public class Main3D implements ApplicationListener {
         worldCamera.update();
         modelBatch.begin(worldCamera);
         floorGrid.render(modelBatch, environment);
+        renderBullets();
         if (flowState != GameFlowState.TITLE) {
             player.render(modelBatch, environment);
         }
@@ -148,6 +154,7 @@ public class Main3D implements ApplicationListener {
         if (player != null) {
             player.dispose();
         }
+        clearBullets();
     }
 
     private void handleGlobalInput() {
@@ -176,6 +183,8 @@ public class Main3D implements ApplicationListener {
         if (flowState == GameFlowState.PLAYING) {
             updateCameraMovementBasis();
             player.update(delta, floorGrid, cameraMoveForward, cameraMoveRight);
+            handleShootingInput();
+            updateBullets(delta);
         }
     }
 
@@ -194,14 +203,17 @@ public class Main3D implements ApplicationListener {
         } else if (flowState == GameFlowState.PLAYING) {
             drawTopLeftText(STEP_TEXT, 12f, hudCamera.viewportHeight - 12f);
             drawTopLeftText(PLAY_TEXT, 12f, hudCamera.viewportHeight - 34f);
-            drawTopLeftText("Move Speed: " + Player3D.MOVE_SPEED, 12f, hudCamera.viewportHeight - 56f);
-            drawTopLeftText("Camera: third-person follow", 12f, hudCamera.viewportHeight - 78f);
-            drawTopLeftText(RETURN_TEXT, 12f, hudCamera.viewportHeight - 100f);
-            drawTopLeftText("Tiles: " + (int) floorGrid.getWorldWidth() + " x " + (int) floorGrid.getWorldDepth(), 12f, hudCamera.viewportHeight - 122f);
+            drawTopLeftText(SHOOT_TEXT, 12f, hudCamera.viewportHeight - 56f);
+            drawTopLeftText("Move Speed: " + Player3D.MOVE_SPEED, 12f, hudCamera.viewportHeight - 78f);
+            drawTopLeftText("Bullet Speed: " + Bullet3D.SPEED, 12f, hudCamera.viewportHeight - 100f);
+            drawTopLeftText("Bullets: " + bullets.size(), 12f, hudCamera.viewportHeight - 122f);
+            drawTopLeftText("Camera: third-person follow", 12f, hudCamera.viewportHeight - 144f);
+            drawTopLeftText(RETURN_TEXT, 12f, hudCamera.viewportHeight - 166f);
+            drawTopLeftText("Tiles: " + (int) floorGrid.getWorldWidth() + " x " + (int) floorGrid.getWorldDepth(), 12f, hudCamera.viewportHeight - 188f);
             drawTopLeftText(
                 String.format("Player Position: %.1f, %.1f", player.getPosition().x, player.getPosition().z),
                 12f,
-                hudCamera.viewportHeight - 144f
+                hudCamera.viewportHeight - 210f
             );
         }
 
@@ -221,6 +233,7 @@ public class Main3D implements ApplicationListener {
     private void goToTitleScreen() {
         floorGrid.reset();
         player.reset();
+        clearBullets();
         flowState = GameFlowState.TITLE;
         countdownTimer = COUNTDOWN_TOTAL_SECONDS;
         snapCameraToPlayer();
@@ -229,6 +242,7 @@ public class Main3D implements ApplicationListener {
     private void startCountdown() {
         floorGrid.reset();
         player.reset();
+        clearBullets();
         flowState = GameFlowState.COUNTDOWN;
         countdownTimer = COUNTDOWN_TOTAL_SECONDS;
         snapCameraToPlayer();
@@ -255,6 +269,36 @@ public class Main3D implements ApplicationListener {
         cameraTarget.lerp(desiredCameraTarget, followAlpha);
         worldCamera.up.set(Vector3.Y);
         worldCamera.lookAt(cameraTarget);
+    }
+
+    private void handleShootingInput() {
+        if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
+            bullets.add(new Bullet3D(player.getPosition(), player.getFacingDirection()));
+        }
+    }
+
+    private void updateBullets(float delta) {
+        Iterator<Bullet3D> iterator = bullets.iterator();
+        while (iterator.hasNext()) {
+            Bullet3D bullet = iterator.next();
+            if (!bullet.update(delta, floorGrid)) {
+                bullet.dispose();
+                iterator.remove();
+            }
+        }
+    }
+
+    private void renderBullets() {
+        for (Bullet3D bullet : bullets) {
+            bullet.render(modelBatch, environment);
+        }
+    }
+
+    private void clearBullets() {
+        for (Bullet3D bullet : bullets) {
+            bullet.dispose();
+        }
+        bullets.clear();
     }
 
     private void updateCameraMovementBasis() {
