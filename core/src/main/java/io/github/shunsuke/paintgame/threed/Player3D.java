@@ -31,6 +31,8 @@ public class Player3D implements Disposable {
     private final ModelInstance instance;
     private final Vector3 position = new Vector3();
     private final Vector3 facingDirection = new Vector3(0f, 0f, -1f);
+    private final Vector3 moveDirection = new Vector3();
+    private final Vector3 sideDirection = new Vector3();
 
     public Player3D() {
         ModelBuilder modelBuilder = new ModelBuilder();
@@ -45,31 +47,32 @@ public class Player3D implements Disposable {
         reset();
     }
 
-    public void update(float delta, FloorGrid3D floorGrid) {
-        float moveX = 0f;
-        float moveZ = 0f;
+    public void update(float delta, FloorGrid3D floorGrid, Vector3 cameraForward, Vector3 cameraRight) {
+        float moveForward = 0f;
+        float moveSide = 0f;
 
         if (isLeftPressed()) {
-            moveX -= 1f;
+            moveSide -= 1f;
         }
         if (isRightPressed()) {
-            moveX += 1f;
+            moveSide += 1f;
         }
         if (isForwardPressed()) {
-            moveZ -= 1f;
+            moveForward += 1f;
         }
         if (isBackwardPressed()) {
-            moveZ += 1f;
+            moveForward -= 1f;
         }
 
-        if (moveX != 0f || moveZ != 0f) {
-            float length = (float) Math.sqrt(moveX * moveX + moveZ * moveZ);
-            moveX /= length;
-            moveZ /= length;
+        if (moveForward != 0f || moveSide != 0f) {
+            // Convert keyboard input into a direction based on the camera's horizontal view.
+            moveDirection.set(cameraForward).scl(moveForward);
+            sideDirection.set(cameraRight).scl(moveSide);
+            moveDirection.add(sideDirection).nor();
 
-            facingDirection.set(moveX, 0f, moveZ);
-            position.x += moveX * MOVE_SPEED * delta;
-            position.z += moveZ * MOVE_SPEED * delta;
+            facingDirection.set(moveDirection);
+            position.x += moveDirection.x * MOVE_SPEED * delta;
+            position.z += moveDirection.z * MOVE_SPEED * delta;
         }
 
         // Keep the player inside the floor so the early 3D prototype is easy to control.

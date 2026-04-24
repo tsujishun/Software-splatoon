@@ -24,7 +24,7 @@ public class Main3D implements ApplicationListener {
     private static final String TITLE_TEXT = "Paint Battle 3D Prototype";
     private static final String TITLE_PROMPT_TEXT = "Press Enter to Start";
     private static final String STEP_TEXT = "Step 2: 3D Player Movement";
-    private static final String PLAY_TEXT = "WASD / Arrows: Move on the floor";
+    private static final String PLAY_TEXT = "WASD / Arrows: Move relative to the camera";
     private static final String RETURN_TEXT = "Press R to return to the title screen";
     private static final float COUNTDOWN_TOTAL_SECONDS = 4f;
     private static final float CAMERA_DISTANCE = 4.5f;
@@ -44,6 +44,8 @@ public class Main3D implements ApplicationListener {
     private FloorGrid3D floorGrid;
     private Player3D player;
     private final Vector3 cameraTarget = new Vector3();
+    private final Vector3 cameraMoveForward = new Vector3();
+    private final Vector3 cameraMoveRight = new Vector3();
     private final Vector3 desiredCameraPosition = new Vector3();
     private final Vector3 desiredCameraTarget = new Vector3();
 
@@ -172,7 +174,8 @@ public class Main3D implements ApplicationListener {
         }
 
         if (flowState == GameFlowState.PLAYING) {
-            player.update(delta, floorGrid);
+            updateCameraMovementBasis();
+            player.update(delta, floorGrid, cameraMoveForward, cameraMoveRight);
         }
     }
 
@@ -252,6 +255,18 @@ public class Main3D implements ApplicationListener {
         cameraTarget.lerp(desiredCameraTarget, followAlpha);
         worldCamera.up.set(Vector3.Y);
         worldCamera.lookAt(cameraTarget);
+    }
+
+    private void updateCameraMovementBasis() {
+        // Ignore the camera's vertical tilt so movement stays on the floor plane.
+        cameraMoveForward.set(worldCamera.direction.x, 0f, worldCamera.direction.z);
+        if (cameraMoveForward.isZero(0.0001f)) {
+            cameraMoveForward.set(player.getFacingDirection());
+        } else {
+            cameraMoveForward.nor();
+        }
+
+        cameraMoveRight.set(cameraMoveForward).crs(Vector3.Y).nor();
     }
 
     private void snapCameraToPlayer() {
