@@ -27,7 +27,7 @@ import java.util.Iterator;
 public class Main3D implements ApplicationListener {
     private static final String TITLE_TEXT = "Paint Battle 3D Prototype";
     private static final String TITLE_PROMPT_TEXT = "Press Enter to Start";
-    private static final String STEP_TEXT = "Step 2.7: Separate Camera and Movement";
+    private static final String STEP_TEXT = "Step 5: 3D Paint HUD";
     private static final String PLAY_TEXT = "WASD: Move relative to the camera";
     private static final String CAMERA_CONTROL_TEXT = "Move the mouse to control the camera";
     private static final String SHOOT_TEXT = "Space: Shoot in the camera direction";
@@ -229,22 +229,25 @@ public class Main3D implements ApplicationListener {
             drawTopLeftText(CAMERA_CONTROL_TEXT, 12f, hudCamera.viewportHeight - 56f);
             drawTopLeftText(SHOOT_TEXT, 12f, hudCamera.viewportHeight - 78f);
             drawTopLeftText(PAINT_TEXT, 12f, hudCamera.viewportHeight - 100f);
-            drawTopLeftText("Weapon: " + playerWeapon.getName(), 12f, hudCamera.viewportHeight - 122f);
-            drawTopLeftText("Move Speed: " + Player3D.MOVE_SPEED, 12f, hudCamera.viewportHeight - 144f);
-            drawTopLeftText("Range: " + playerWeapon.getRange() + "  Bullet Speed: " + playerWeapon.getBulletSpeed(), 12f, hudCamera.viewportHeight - 166f);
-            drawTopLeftText("Paint Radius: " + playerWeapon.getPaintRadius() + "  Fire Interval: " + playerWeapon.getFireInterval(), 12f, hudCamera.viewportHeight - 188f);
-            drawTopLeftText("Bullets: " + bullets.size(), 12f, hudCamera.viewportHeight - 210f);
+            drawTopLeftText("Painted: " + floorGrid.getPaintedCellCount(), 12f, hudCamera.viewportHeight - 122f);
+            drawTopLeftText("Total: " + floorGrid.getTotalCellCount(), 12f, hudCamera.viewportHeight - 144f);
+            drawTopLeftText(String.format("Paint Rate: %.1f%%", floorGrid.getPaintRatePercent()), 12f, hudCamera.viewportHeight - 166f);
+            drawTopLeftText("Weapon: " + playerWeapon.getName(), 12f, hudCamera.viewportHeight - 188f);
+            drawTopLeftText("Move Speed: " + Player3D.MOVE_SPEED, 12f, hudCamera.viewportHeight - 210f);
+            drawTopLeftText("Range: " + playerWeapon.getRange() + "  Bullet Speed: " + playerWeapon.getBulletSpeed(), 12f, hudCamera.viewportHeight - 232f);
+            drawTopLeftText("Paint Radius: " + playerWeapon.getPaintRadius() + "  Fire Interval: " + playerWeapon.getFireInterval(), 12f, hudCamera.viewportHeight - 254f);
+            drawTopLeftText("Bullets: " + bullets.size(), 12f, hudCamera.viewportHeight - 276f);
             drawTopLeftText(
                 String.format("Camera Yaw: %.0f  Pitch: %.0f", cameraYaw, cameraPitch),
                 12f,
-                hudCamera.viewportHeight - 232f
+                hudCamera.viewportHeight - 298f
             );
-            drawTopLeftText("Camera: third-person follow", 12f, hudCamera.viewportHeight - 254f);
-            drawTopLeftText(RETURN_TEXT, 12f, hudCamera.viewportHeight - 276f);
+            drawTopLeftText("Camera: third-person follow", 12f, hudCamera.viewportHeight - 320f);
+            drawTopLeftText(RETURN_TEXT, 12f, hudCamera.viewportHeight - 342f);
             drawTopLeftText(
                 String.format("Player Position: %.1f, %.1f", player.getPosition().x, player.getPosition().z),
                 12f,
-                hudCamera.viewportHeight - 298f
+                hudCamera.viewportHeight - 364f
             );
         }
 
