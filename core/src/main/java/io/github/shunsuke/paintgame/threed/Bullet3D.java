@@ -14,13 +14,11 @@ import com.badlogic.gdx.utils.Disposable;
 
 /**
  * Very simple bullet for the early 3D prototype.
- * It moves in a straight line on the floor plane and disappears after a short distance.
+ * It moves in a straight line on the floor plane, paints the tiles below,
+ * and disappears after a short distance.
  */
 public class Bullet3D implements Disposable {
-    public static final float SPEED = 9f;
-    public static final float MAX_TRAVEL_DISTANCE = 8f;
-    public static final float SIZE = 0.18f;
-
+    private static final float SIZE = 0.18f;
     private static final float HEIGHT = 0.25f;
     private static final float SPAWN_FORWARD_OFFSET = 0.55f;
     private static final Color BULLET_COLOR = new Color(1f, 0.82f, 0.25f, 1f);
@@ -29,10 +27,11 @@ public class Bullet3D implements Disposable {
     private final ModelInstance instance;
     private final Vector3 position = new Vector3();
     private final Vector3 direction = new Vector3();
+    private final WeaponConfig3D weaponConfig;
 
     private float traveledDistance;
 
-    public Bullet3D(Vector3 playerPosition, Vector3 facingDirection) {
+    public Bullet3D(Vector3 playerPosition, Vector3 facingDirection, WeaponConfig3D weaponConfig) {
         ModelBuilder modelBuilder = new ModelBuilder();
         model = modelBuilder.createBox(
             SIZE,
@@ -42,6 +41,7 @@ public class Bullet3D implements Disposable {
             Usage.Position | Usage.Normal
         );
         instance = new ModelInstance(model);
+        this.weaponConfig = weaponConfig;
 
         direction.set(facingDirection).nor();
         position.set(
@@ -53,12 +53,29 @@ public class Bullet3D implements Disposable {
     }
 
     public boolean update(float delta, FloorGrid3D floorGrid) {
-        float moveDistance = SPEED * delta;
-        position.mulAdd(direction, moveDistance);
-        traveledDistance += moveDistance;
+        float moveDistance = weaponConfig.getBulletSpeed() * delta;
+        float paintStepDistance = Math.max(0.05f, weaponConfig.getPaintRadius() * 0.5f);
+        int stepCount = Math.max(1, (int) Math.ceil(moveDistance / paintStepDistance));
+        float stepDistance = moveDistance / stepCount;
+        boolean isInsideFloor = true;
+
+        paintCurrentTile(floorGrid);
+
+        for (int step = 0; step < stepCount; step++) {
+            position.mulAdd(direction, stepDistance);
+            traveledDistance += stepDistance;
+
+            if (!isInsideFloorBounds(floorGrid)) {
+                isInsideFloor = false;
+                break;
+            }
+
+            paintCurrentTile(floorGrid);
+        }
+
         updateTransform();
 
-        return traveledDistance < MAX_TRAVEL_DISTANCE && isInsideFloorBounds(floorGrid);
+        return traveledDistance < weaponConfig.getRange() && isInsideFloor;
     }
 
     public void render(ModelBatch modelBatch, Environment environment) {
@@ -76,6 +93,10 @@ public class Bullet3D implements Disposable {
             && position.x <= floorGrid.getMaxX() + margin
             && position.z >= floorGrid.getMinZ() - margin
             && position.z <= floorGrid.getMaxZ() + margin;
+    }
+
+    private void paintCurrentTile(FloorGrid3D floorGrid) {
+        floorGrid.paintAtWorldPosition(position.x, position.z, weaponConfig.getPaintRadius(), FloorGrid3D.CELL_STATE_PLAYER);
     }
 
     private void updateTransform() {

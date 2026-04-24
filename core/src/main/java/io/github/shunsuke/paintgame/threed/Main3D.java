@@ -26,9 +26,10 @@ import java.util.Iterator;
 public class Main3D implements ApplicationListener {
     private static final String TITLE_TEXT = "Paint Battle 3D Prototype";
     private static final String TITLE_PROMPT_TEXT = "Press Enter to Start";
-    private static final String STEP_TEXT = "Step 3: 3D Shooting";
+    private static final String STEP_TEXT = "Step 4.5: Basic Weapon Parameters";
     private static final String PLAY_TEXT = "WASD / Arrows: Move relative to the camera";
     private static final String SHOOT_TEXT = "Space: Shoot in the facing direction";
+    private static final String PAINT_TEXT = "Basic Shooter paints floor tiles as bullets move";
     private static final String RETURN_TEXT = "Press R to return to the title screen";
     private static final float COUNTDOWN_TOTAL_SECONDS = 4f;
     private static final float CAMERA_DISTANCE = 4.5f;
@@ -56,6 +57,8 @@ public class Main3D implements ApplicationListener {
 
     private GameFlowState flowState;
     private float countdownTimer;
+    private WeaponConfig3D playerWeapon;
+    private float fireCooldownRemaining;
 
     @Override
     public void create() {
@@ -71,8 +74,10 @@ public class Main3D implements ApplicationListener {
 
         floorGrid = new FloorGrid3D(12, 12);
         player = new Player3D();
+        playerWeapon = WeaponConfig3D.BASIC_SHOOTER;
         flowState = GameFlowState.TITLE;
         countdownTimer = COUNTDOWN_TOTAL_SECONDS;
+        fireCooldownRemaining = 0f;
 
         resize(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
     }
@@ -183,6 +188,7 @@ public class Main3D implements ApplicationListener {
         if (flowState == GameFlowState.PLAYING) {
             updateCameraMovementBasis();
             player.update(delta, floorGrid, cameraMoveForward, cameraMoveRight);
+            fireCooldownRemaining = Math.max(0f, fireCooldownRemaining - delta);
             handleShootingInput();
             updateBullets(delta);
         }
@@ -204,16 +210,19 @@ public class Main3D implements ApplicationListener {
             drawTopLeftText(STEP_TEXT, 12f, hudCamera.viewportHeight - 12f);
             drawTopLeftText(PLAY_TEXT, 12f, hudCamera.viewportHeight - 34f);
             drawTopLeftText(SHOOT_TEXT, 12f, hudCamera.viewportHeight - 56f);
-            drawTopLeftText("Move Speed: " + Player3D.MOVE_SPEED, 12f, hudCamera.viewportHeight - 78f);
-            drawTopLeftText("Bullet Speed: " + Bullet3D.SPEED, 12f, hudCamera.viewportHeight - 100f);
-            drawTopLeftText("Bullets: " + bullets.size(), 12f, hudCamera.viewportHeight - 122f);
-            drawTopLeftText("Camera: third-person follow", 12f, hudCamera.viewportHeight - 144f);
-            drawTopLeftText(RETURN_TEXT, 12f, hudCamera.viewportHeight - 166f);
-            drawTopLeftText("Tiles: " + (int) floorGrid.getWorldWidth() + " x " + (int) floorGrid.getWorldDepth(), 12f, hudCamera.viewportHeight - 188f);
+            drawTopLeftText(PAINT_TEXT, 12f, hudCamera.viewportHeight - 78f);
+            drawTopLeftText("Weapon: " + playerWeapon.getName(), 12f, hudCamera.viewportHeight - 100f);
+            drawTopLeftText("Move Speed: " + Player3D.MOVE_SPEED, 12f, hudCamera.viewportHeight - 122f);
+            drawTopLeftText("Range: " + playerWeapon.getRange() + "  Bullet Speed: " + playerWeapon.getBulletSpeed(), 12f, hudCamera.viewportHeight - 144f);
+            drawTopLeftText("Paint Radius: " + playerWeapon.getPaintRadius() + "  Fire Interval: " + playerWeapon.getFireInterval(), 12f, hudCamera.viewportHeight - 166f);
+            drawTopLeftText("Bullets: " + bullets.size(), 12f, hudCamera.viewportHeight - 188f);
+            drawTopLeftText("Camera: third-person follow", 12f, hudCamera.viewportHeight - 210f);
+            drawTopLeftText(RETURN_TEXT, 12f, hudCamera.viewportHeight - 232f);
+            drawTopLeftText("Tiles: " + (int) floorGrid.getWorldWidth() + " x " + (int) floorGrid.getWorldDepth(), 12f, hudCamera.viewportHeight - 254f);
             drawTopLeftText(
                 String.format("Player Position: %.1f, %.1f", player.getPosition().x, player.getPosition().z),
                 12f,
-                hudCamera.viewportHeight - 210f
+                hudCamera.viewportHeight - 276f
             );
         }
 
@@ -236,6 +245,7 @@ public class Main3D implements ApplicationListener {
         clearBullets();
         flowState = GameFlowState.TITLE;
         countdownTimer = COUNTDOWN_TOTAL_SECONDS;
+        fireCooldownRemaining = 0f;
         snapCameraToPlayer();
     }
 
@@ -245,6 +255,7 @@ public class Main3D implements ApplicationListener {
         clearBullets();
         flowState = GameFlowState.COUNTDOWN;
         countdownTimer = COUNTDOWN_TOTAL_SECONDS;
+        fireCooldownRemaining = 0f;
         snapCameraToPlayer();
     }
 
@@ -272,8 +283,10 @@ public class Main3D implements ApplicationListener {
     }
 
     private void handleShootingInput() {
-        if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) {
-            bullets.add(new Bullet3D(player.getPosition(), player.getFacingDirection()));
+        // Holding Space should keep firing at the weapon's configured interval.
+        while (Gdx.input.isKeyPressed(Input.Keys.SPACE) && fireCooldownRemaining <= 0f) {
+            bullets.add(new Bullet3D(player.getPosition(), player.getFacingDirection(), playerWeapon));
+            fireCooldownRemaining += playerWeapon.getFireInterval();
         }
     }
 

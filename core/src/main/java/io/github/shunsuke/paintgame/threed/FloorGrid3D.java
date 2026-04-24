@@ -9,6 +9,7 @@ import com.badlogic.gdx.graphics.g3d.ModelBatch;
 import com.badlogic.gdx.graphics.g3d.ModelInstance;
 import com.badlogic.gdx.graphics.g3d.attributes.ColorAttribute;
 import com.badlogic.gdx.graphics.g3d.utils.ModelBuilder;
+import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Disposable;
 
 import java.util.ArrayList;
@@ -98,6 +99,29 @@ public class FloorGrid3D implements Disposable {
         setInstanceColor(tile.instance, getTileColor(cellState));
     }
 
+    public void paintAtWorldPosition(float worldX, float worldZ, int cellState) {
+        paintAtWorldPosition(worldX, worldZ, 0f, cellState);
+    }
+
+    public void paintAtWorldPosition(float worldX, float worldZ, float radius, int cellState) {
+        if (worldX < minX || worldX >= maxX || worldZ < minZ || worldZ >= maxZ) {
+            return;
+        }
+
+        int minColumn = MathUtils.clamp((int) ((worldX - radius - minX) / TILE_SIZE), 0, columns - 1);
+        int maxColumn = MathUtils.clamp((int) ((worldX + radius - minX) / TILE_SIZE), 0, columns - 1);
+        int minRow = MathUtils.clamp((int) ((worldZ - radius - minZ) / TILE_SIZE), 0, rows - 1);
+        int maxRow = MathUtils.clamp((int) ((worldZ + radius - minZ) / TILE_SIZE), 0, rows - 1);
+
+        for (int row = minRow; row <= maxRow; row++) {
+            for (int column = minColumn; column <= maxColumn; column++) {
+                if (doesCircleTouchTile(worldX, worldZ, radius, row, column)) {
+                    setCellState(row, column, cellState);
+                }
+            }
+        }
+    }
+
     public int getPlayerPaintedCellCount() {
         return playerPaintedCellCount;
     }
@@ -170,6 +194,19 @@ public class FloorGrid3D implements Disposable {
 
     private void setInstanceColor(ModelInstance instance, Color color) {
         instance.materials.get(0).set(ColorAttribute.createDiffuse(color));
+    }
+
+    private boolean doesCircleTouchTile(float worldX, float worldZ, float radius, int row, int column) {
+        float tileMinX = minX + column * TILE_SIZE;
+        float tileMaxX = tileMinX + TILE_SIZE;
+        float tileMinZ = minZ + row * TILE_SIZE;
+        float tileMaxZ = tileMinZ + TILE_SIZE;
+
+        float nearestX = MathUtils.clamp(worldX, tileMinX, tileMaxX);
+        float nearestZ = MathUtils.clamp(worldZ, tileMinZ, tileMaxZ);
+        float deltaX = worldX - nearestX;
+        float deltaZ = worldZ - nearestZ;
+        return deltaX * deltaX + deltaZ * deltaZ <= radius * radius;
     }
 
     private Color getTileColor(int cellState) {
