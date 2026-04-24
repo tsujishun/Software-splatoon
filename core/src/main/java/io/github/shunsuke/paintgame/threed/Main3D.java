@@ -27,13 +27,14 @@ import java.util.Iterator;
 public class Main3D implements ApplicationListener {
     private static final String TITLE_TEXT = "Paint Battle 3D Prototype";
     private static final String TITLE_PROMPT_TEXT = "Press Enter to Start";
-    private static final String STEP_TEXT = "Step 5: 3D Paint HUD";
+    private static final String STEP_TEXT = "Step 6: 3D Timer and Game Over";
     private static final String PLAY_TEXT = "WASD: Move relative to the camera";
     private static final String CAMERA_CONTROL_TEXT = "Move the mouse to control the camera";
     private static final String SHOOT_TEXT = "Space: Shoot in the camera direction";
     private static final String PAINT_TEXT = "Basic Shooter paints floor tiles as bullets move";
     private static final String RETURN_TEXT = "Press R to return to the title screen";
     private static final float COUNTDOWN_TOTAL_SECONDS = 4f;
+    private static final float GAME_DURATION_SECONDS = 60f;
     private static final float CAMERA_DISTANCE = 4.5f;
     private static final float CAMERA_LOOK_HEIGHT = 0.4f;
     private static final float CAMERA_LOOK_AHEAD = 0.8f;
@@ -65,6 +66,7 @@ public class Main3D implements ApplicationListener {
 
     private GameFlowState flowState;
     private float countdownTimer;
+    private float remainingTime;
     private WeaponConfig3D playerWeapon;
     private float fireCooldownRemaining;
     private float cameraYaw;
@@ -88,6 +90,7 @@ public class Main3D implements ApplicationListener {
         playerWeapon = WeaponConfig3D.BASIC_SHOOTER;
         flowState = GameFlowState.TITLE;
         countdownTimer = COUNTDOWN_TOTAL_SECONDS;
+        remainingTime = GAME_DURATION_SECONDS;
         fireCooldownRemaining = 0f;
         mouseCaptured = false;
         resetCameraAngles();
@@ -201,6 +204,12 @@ public class Main3D implements ApplicationListener {
         }
 
         if (flowState == GameFlowState.PLAYING) {
+            remainingTime = Math.max(0f, remainingTime - delta);
+            if (remainingTime <= 0f) {
+                finishGame();
+                return;
+            }
+
             updateCameraControl();
             updateCameraMovementBasis();
             player.setFacingDirection(cameraMoveForward);
@@ -249,6 +258,15 @@ public class Main3D implements ApplicationListener {
                 12f,
                 hudCamera.viewportHeight - 364f
             );
+            drawTopLeftText(String.format("Time: %d", (int) Math.ceil(remainingTime)), hudCamera.viewportWidth - 120f, hudCamera.viewportHeight - 12f);
+        } else if (flowState == GameFlowState.GAME_OVER) {
+            drawTopLeftText(STEP_TEXT, 12f, hudCamera.viewportHeight - 12f);
+            drawTopLeftText("Painted: " + floorGrid.getPaintedCellCount(), 12f, hudCamera.viewportHeight - 34f);
+            drawTopLeftText("Total: " + floorGrid.getTotalCellCount(), 12f, hudCamera.viewportHeight - 56f);
+            drawTopLeftText(String.format("Paint Rate: %.1f%%", floorGrid.getPaintRatePercent()), 12f, hudCamera.viewportHeight - 78f);
+            drawTopLeftText("Time: 0", hudCamera.viewportWidth - 120f, hudCamera.viewportHeight - 12f);
+            drawCenteredText("Game Over", hudCamera.viewportHeight / 2f + 18f);
+            drawCenteredText("Press R to return to the title screen", hudCamera.viewportHeight / 2f - 18f);
         }
 
         spriteBatch.end();
@@ -270,6 +288,7 @@ public class Main3D implements ApplicationListener {
         clearBullets();
         flowState = GameFlowState.TITLE;
         countdownTimer = COUNTDOWN_TOTAL_SECONDS;
+        remainingTime = GAME_DURATION_SECONDS;
         fireCooldownRemaining = 0f;
         resetCameraAngles();
         setMouseCapture(false);
@@ -282,10 +301,18 @@ public class Main3D implements ApplicationListener {
         clearBullets();
         flowState = GameFlowState.COUNTDOWN;
         countdownTimer = COUNTDOWN_TOTAL_SECONDS;
+        remainingTime = GAME_DURATION_SECONDS;
         fireCooldownRemaining = 0f;
         resetCameraAngles();
         setMouseCapture(false);
         snapCameraToPlayer();
+    }
+
+    private void finishGame() {
+        remainingTime = 0f;
+        flowState = GameFlowState.GAME_OVER;
+        clearBullets();
+        setMouseCapture(false);
     }
 
     private String getCountdownText() {
