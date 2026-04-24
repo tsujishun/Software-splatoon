@@ -69,6 +69,7 @@ public class Main3D implements ApplicationListener {
     private float fireCooldownRemaining;
     private float cameraYaw;
     private float cameraPitch;
+    private boolean mouseCaptured;
 
     @Override
     public void create() {
@@ -88,7 +89,9 @@ public class Main3D implements ApplicationListener {
         flowState = GameFlowState.TITLE;
         countdownTimer = COUNTDOWN_TOTAL_SECONDS;
         fireCooldownRemaining = 0f;
+        mouseCaptured = false;
         resetCameraAngles();
+        setMouseCapture(false);
 
         resize(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
     }
@@ -122,7 +125,6 @@ public class Main3D implements ApplicationListener {
 
         handleGlobalInput();
         updateFlow(delta);
-        updateMouseCapture();
 
         Gdx.gl.glViewport(0, 0, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
         Gdx.gl.glEnable(GL20.GL_DEPTH_TEST);
@@ -193,6 +195,7 @@ public class Main3D implements ApplicationListener {
             if (countdownTimer <= 0f) {
                 countdownTimer = 0f;
                 flowState = GameFlowState.PLAYING;
+                setMouseCapture(true);
             }
             return;
         }
@@ -266,6 +269,7 @@ public class Main3D implements ApplicationListener {
         countdownTimer = COUNTDOWN_TOTAL_SECONDS;
         fireCooldownRemaining = 0f;
         resetCameraAngles();
+        setMouseCapture(false);
         snapCameraToPlayer();
     }
 
@@ -277,6 +281,7 @@ public class Main3D implements ApplicationListener {
         countdownTimer = COUNTDOWN_TOTAL_SECONDS;
         fireCooldownRemaining = 0f;
         resetCameraAngles();
+        setMouseCapture(false);
         snapCameraToPlayer();
     }
 
@@ -309,8 +314,19 @@ public class Main3D implements ApplicationListener {
         cameraPitch = MathUtils.clamp(cameraPitch, CAMERA_MIN_PITCH, CAMERA_MAX_PITCH);
     }
 
-    private void updateMouseCapture() {
-        Gdx.input.setCursorCatched(flowState == GameFlowState.PLAYING);
+    private void setMouseCapture(boolean shouldCapture) {
+        if (mouseCaptured == shouldCapture) {
+            return;
+        }
+
+        mouseCaptured = shouldCapture;
+        Gdx.input.setCursorCatched(shouldCapture);
+
+        if (shouldCapture) {
+            Gdx.input.setCursorPosition(Gdx.graphics.getWidth() / 2, Gdx.graphics.getHeight() / 2);
+            Gdx.input.getDeltaX();
+            Gdx.input.getDeltaY();
+        }
     }
 
     private void handleShootingInput() {
