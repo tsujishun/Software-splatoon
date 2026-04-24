@@ -27,7 +27,7 @@ import java.util.Iterator;
 public class Main3D implements ApplicationListener {
     private static final String TITLE_TEXT = "Paint Battle 3D Prototype";
     private static final String TITLE_PROMPT_TEXT = "Press Enter to Start";
-    private static final String STEP_TEXT = "Step 8: 3D CPU Enemy";
+    private static final String STEP_TEXT = "Step 9: 3D Match Result";
     private static final String PLAY_TEXT = "WASD: Move relative to the camera";
     private static final String CAMERA_CONTROL_TEXT = "Move the mouse to control the camera";
     private static final String SHOOT_TEXT = "Space: Shoot in the camera direction";
@@ -76,6 +76,12 @@ public class Main3D implements ApplicationListener {
     private float cameraPitch;
     private boolean mouseCaptured;
     private int currentPaintCellState;
+    private String resultText;
+    private int finalPlayerScore;
+    private int finalEnemyScore;
+    private int finalTotalTiles;
+    private float finalPlayerPaintRate;
+    private float finalEnemyPaintRate;
 
     @Override
     public void create() {
@@ -102,6 +108,7 @@ public class Main3D implements ApplicationListener {
         enemyFireCooldownRemaining = enemyWeapon.getFireInterval();
         mouseCaptured = false;
         currentPaintCellState = FloorGrid3D.CELL_STATE_PLAYER;
+        resetMatchResult();
         resetCameraAngles();
         setMouseCapture(false);
 
@@ -287,15 +294,23 @@ public class Main3D implements ApplicationListener {
             drawTopLeftText(String.format("Time: %d", (int) Math.ceil(remainingTime)), hudCamera.viewportWidth - 120f, hudCamera.viewportHeight - 12f);
         } else if (flowState == GameFlowState.GAME_OVER) {
             drawTopLeftText(STEP_TEXT, 12f, hudCamera.viewportHeight - 12f);
-            drawTopLeftText("Player: " + floorGrid.getPlayerPaintedCellCount(), 12f, hudCamera.viewportHeight - 34f);
-            drawTopLeftText("Enemy: " + floorGrid.getEnemyPaintedCellCount(), 12f, hudCamera.viewportHeight - 56f);
-            drawTopLeftText("Total: " + floorGrid.getTotalCellCount(), 12f, hudCamera.viewportHeight - 78f);
-            drawTopLeftText(String.format("Player Paint Rate: %.1f%%", floorGrid.getPlayerPaintRatePercent()), 12f, hudCamera.viewportHeight - 100f);
-            drawTopLeftText(String.format("Enemy Paint Rate: %.1f%%", floorGrid.getEnemyPaintRatePercent()), 12f, hudCamera.viewportHeight - 122f);
-            drawTopLeftText("Current Color: " + getCurrentPaintColorLabel(), 12f, hudCamera.viewportHeight - 144f);
+            drawTopLeftText("Player: " + finalPlayerScore, 12f, hudCamera.viewportHeight - 34f);
+            drawTopLeftText("Enemy: " + finalEnemyScore, 12f, hudCamera.viewportHeight - 56f);
+            drawTopLeftText("Total: " + finalTotalTiles, 12f, hudCamera.viewportHeight - 78f);
+            drawTopLeftText(String.format("Player Paint Rate: %.1f%%", finalPlayerPaintRate), 12f, hudCamera.viewportHeight - 100f);
+            drawTopLeftText(String.format("Enemy Paint Rate: %.1f%%", finalEnemyPaintRate), 12f, hudCamera.viewportHeight - 122f);
             drawTopLeftText("Time: 0", hudCamera.viewportWidth - 120f, hudCamera.viewportHeight - 12f);
-            drawCenteredText("Game Over", hudCamera.viewportHeight / 2f + 18f);
-            drawCenteredText("Press R to return to the title screen", hudCamera.viewportHeight / 2f - 18f);
+            drawCenteredText("Game Over", hudCamera.viewportHeight / 2f + 48f);
+            drawCenteredText(resultText, hudCamera.viewportHeight / 2f + 16f);
+            drawCenteredText(
+                String.format("Player %d / Enemy %d", finalPlayerScore, finalEnemyScore),
+                hudCamera.viewportHeight / 2f - 16f
+            );
+            drawCenteredText(
+                String.format("Player %.1f%% / Enemy %.1f%%", finalPlayerPaintRate, finalEnemyPaintRate),
+                hudCamera.viewportHeight / 2f - 48f
+            );
+            drawCenteredText("Press R to return to the title screen", hudCamera.viewportHeight / 2f - 80f);
         }
 
         spriteBatch.end();
@@ -322,6 +337,7 @@ public class Main3D implements ApplicationListener {
         fireCooldownRemaining = 0f;
         enemyFireCooldownRemaining = enemyWeapon.getFireInterval();
         currentPaintCellState = FloorGrid3D.CELL_STATE_PLAYER;
+        resetMatchResult();
         resetCameraAngles();
         setMouseCapture(false);
         snapCameraToPlayer();
@@ -338,12 +354,20 @@ public class Main3D implements ApplicationListener {
         fireCooldownRemaining = 0f;
         enemyFireCooldownRemaining = enemyWeapon.getFireInterval();
         currentPaintCellState = FloorGrid3D.CELL_STATE_PLAYER;
+        resetMatchResult();
         resetCameraAngles();
         setMouseCapture(false);
         snapCameraToPlayer();
     }
 
     private void finishGame() {
+        // Freeze the match result at time-up so the Game Over screen never changes afterward.
+        finalPlayerScore = floorGrid.getPlayerPaintedCellCount();
+        finalEnemyScore = floorGrid.getEnemyPaintedCellCount();
+        finalTotalTiles = floorGrid.getTotalCellCount();
+        finalPlayerPaintRate = floorGrid.getPlayerPaintRatePercent();
+        finalEnemyPaintRate = floorGrid.getEnemyPaintRatePercent();
+        resultText = getResultText(finalPlayerScore, finalEnemyScore);
         remainingTime = 0f;
         flowState = GameFlowState.GAME_OVER;
         clearBullets();
@@ -518,5 +542,24 @@ public class Main3D implements ApplicationListener {
             return "Enemy";
         }
         return "Player";
+    }
+
+    private void resetMatchResult() {
+        resultText = "";
+        finalPlayerScore = 0;
+        finalEnemyScore = 0;
+        finalTotalTiles = floorGrid != null ? floorGrid.getTotalCellCount() : 0;
+        finalPlayerPaintRate = 0f;
+        finalEnemyPaintRate = 0f;
+    }
+
+    private String getResultText(int playerScore, int enemyScore) {
+        if (playerScore > enemyScore) {
+            return "Player Wins";
+        }
+        if (enemyScore > playerScore) {
+            return "Enemy Wins";
+        }
+        return "Draw";
     }
 }
