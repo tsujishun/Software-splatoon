@@ -27,9 +27,11 @@ public class Main3D implements ApplicationListener {
     private static final String PLAY_TEXT = "WASD / Arrows: Move on the floor";
     private static final String RETURN_TEXT = "Press R to return to the title screen";
     private static final float COUNTDOWN_TOTAL_SECONDS = 4f;
-    private static final float CAMERA_HEIGHT_MULTIPLIER = 1.1f;
-    private static final float CAMERA_DEPTH_MULTIPLIER = 0.8f;
-    private static final float CAMERA_LOOK_AHEAD = 1.2f;
+    private static final float CAMERA_DISTANCE = 4.5f;
+    private static final float CAMERA_HEIGHT = 2.4f;
+    private static final float CAMERA_LOOK_HEIGHT = 0.4f;
+    private static final float CAMERA_LOOK_AHEAD = 0.8f;
+    private static final float CAMERA_FOLLOW_SPEED = 6f;
     private static final Color CLEAR_COLOR = new Color(0.08f, 0.1f, 0.14f, 1f);
 
     private ModelBatch modelBatch;
@@ -41,8 +43,9 @@ public class Main3D implements ApplicationListener {
     private GlyphLayout glyphLayout;
     private FloorGrid3D floorGrid;
     private Player3D player;
-    private final Vector3 cameraOffset = new Vector3();
     private final Vector3 cameraTarget = new Vector3();
+    private final Vector3 desiredCameraPosition = new Vector3();
+    private final Vector3 desiredCameraTarget = new Vector3();
 
     private GameFlowState flowState;
     private float countdownTimer;
@@ -79,9 +82,7 @@ public class Main3D implements ApplicationListener {
         worldCamera.viewportWidth = width;
         worldCamera.viewportHeight = height;
 
-        float stageSize = Math.max(floorGrid.getWorldWidth(), floorGrid.getWorldDepth());
-        cameraOffset.set(0f, stageSize * CAMERA_HEIGHT_MULTIPLIER, stageSize * CAMERA_DEPTH_MULTIPLIER);
-        updateCameraPosition();
+        snapCameraToPlayer();
         worldCamera.near = 0.1f;
         worldCamera.far = 80f;
         worldCamera.update();
@@ -104,7 +105,7 @@ public class Main3D implements ApplicationListener {
         Gdx.gl.glClearColor(CLEAR_COLOR.r, CLEAR_COLOR.g, CLEAR_COLOR.b, CLEAR_COLOR.a);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT | GL20.GL_DEPTH_BUFFER_BIT);
 
-        updateCameraPosition();
+        updateCameraPosition(delta);
         worldCamera.update();
         modelBatch.begin(worldCamera);
         floorGrid.render(modelBatch, environment);
@@ -191,12 +192,13 @@ public class Main3D implements ApplicationListener {
             drawTopLeftText(STEP_TEXT, 12f, hudCamera.viewportHeight - 12f);
             drawTopLeftText(PLAY_TEXT, 12f, hudCamera.viewportHeight - 34f);
             drawTopLeftText("Move Speed: " + Player3D.MOVE_SPEED, 12f, hudCamera.viewportHeight - 56f);
-            drawTopLeftText(RETURN_TEXT, 12f, hudCamera.viewportHeight - 78f);
-            drawTopLeftText("Tiles: " + (int) floorGrid.getWorldWidth() + " x " + (int) floorGrid.getWorldDepth(), 12f, hudCamera.viewportHeight - 100f);
+            drawTopLeftText("Camera: third-person follow", 12f, hudCamera.viewportHeight - 78f);
+            drawTopLeftText(RETURN_TEXT, 12f, hudCamera.viewportHeight - 100f);
+            drawTopLeftText("Tiles: " + (int) floorGrid.getWorldWidth() + " x " + (int) floorGrid.getWorldDepth(), 12f, hudCamera.viewportHeight - 122f);
             drawTopLeftText(
                 String.format("Player Position: %.1f, %.1f", player.getPosition().x, player.getPosition().z),
                 12f,
-                hudCamera.viewportHeight - 122f
+                hudCamera.viewportHeight - 144f
             );
         }
 
@@ -218,6 +220,7 @@ public class Main3D implements ApplicationListener {
         player.reset();
         flowState = GameFlowState.TITLE;
         countdownTimer = COUNTDOWN_TOTAL_SECONDS;
+        snapCameraToPlayer();
     }
 
     private void startCountdown() {
@@ -225,6 +228,7 @@ public class Main3D implements ApplicationListener {
         player.reset();
         flowState = GameFlowState.COUNTDOWN;
         countdownTimer = COUNTDOWN_TOTAL_SECONDS;
+        snapCameraToPlayer();
     }
 
     private String getCountdownText() {
@@ -240,15 +244,38 @@ public class Main3D implements ApplicationListener {
         return "GO!";
     }
 
-    private void updateCameraPosition() {
-        Vector3 playerPosition = player.getPosition();
-        worldCamera.position.set(
-            playerPosition.x + cameraOffset.x,
-            playerPosition.y + cameraOffset.y,
-            playerPosition.z + cameraOffset.z
-        );
+    private void updateCameraPosition(float delta) {
+        calculateDesiredCamera();
+
+        float followAlpha = Math.min(1f, CAMERA_FOLLOW_SPEED * delta);
+        worldCamera.position.lerp(desiredCameraPosition, followAlpha);
+        cameraTarget.lerp(desiredCameraTarget, followAlpha);
         worldCamera.up.set(Vector3.Y);
-        cameraTarget.set(playerPosition).mulAdd(player.getFacingDirection(), CAMERA_LOOK_AHEAD);
         worldCamera.lookAt(cameraTarget);
+    }
+
+    private void snapCameraToPlayer() {
+        calculateDesiredCamera();
+        worldCamera.position.set(desiredCameraPosition);
+        cameraTarget.set(desiredCameraTarget);
+        worldCamera.up.set(Vector3.Y);
+        worldCamera.lookAt(cameraTarget);
+    }
+
+    private void calculateDesiredCamera() {
+        Vector3 playerPosition = player.getPosition();
+        Vector3 facingDirection = player.getFacingDirection();
+
+        desiredCameraPosition.set(
+            playerPosition.x - facingDirection.x * CAMERA_DISTANCE,
+            playerPosition.y + CAMERA_HEIGHT,
+            playerPosition.z - facingDirection.z * CAMERA_DISTANCE
+        );
+
+        desiredCameraTarget.set(
+            playerPosition.x + facingDirection.x * CAMERA_LOOK_AHEAD,
+            playerPosition.y + CAMERA_LOOK_HEIGHT,
+            playerPosition.z + facingDirection.z * CAMERA_LOOK_AHEAD
+        );
     }
 }
