@@ -29,7 +29,7 @@ public class Main3D implements ApplicationListener {
     private static final boolean DEBUG_MODE = false;
     private static final String TITLE_TEXT = "Paint Battle 3D Prototype";
     private static final String TITLE_PROMPT_TEXT = "Press Enter to Start";
-    private static final String STEP_TEXT = "Step 10: 3D Controls and Pause";
+    private static final String STEP_TEXT = "Step 12: 3D Aim and Paint Feedback";
     private static final String TITLE_CONTROL_MOVE_TEXT = "WASD: Move";
     private static final String TITLE_CONTROL_LOOK_TEXT = "Mouse: Look";
     private static final String TITLE_CONTROL_SHOOT_TEXT = "Space: Shoot";
@@ -57,7 +57,11 @@ public class Main3D implements ApplicationListener {
     private static final float CROSSHAIR_GAP = 5f;
     private static final float CROSSHAIR_ARM_LENGTH = 10f;
     private static final float CROSSHAIR_CENTER_RADIUS = 2f;
+    private static final float CROSSHAIR_SHADOW_OFFSET = 1f;
+    private static final float CROSSHAIR_DOT_RADIUS = 1.5f;
     private static final Color CROSSHAIR_COLOR = new Color(1f, 1f, 1f, 0.9f);
+    private static final Color CROSSHAIR_SHADOW_COLOR = new Color(0f, 0f, 0f, 0.55f);
+    private static final Color CROSSHAIR_CENTER_COLOR = new Color(0.16f, 0.8f, 1f, 1f);
     private static final Color CLEAR_COLOR = new Color(0.08f, 0.1f, 0.14f, 1f);
 
     private ModelBatch modelBatch;
@@ -276,6 +280,7 @@ public class Main3D implements ApplicationListener {
             handleShootingInput();
             handleEnemyShooting();
             updateBullets(delta);
+            floorGrid.update(delta);
         }
     }
 
@@ -306,36 +311,17 @@ public class Main3D implements ApplicationListener {
             if (DEBUG_MODE) {
                 drawTopLeftText(DEBUG_PAINT_TEXT, 12f, hudCamera.viewportHeight - 144f);
             }
-            drawTopLeftText("Player: " + floorGrid.getPlayerPaintedCellCount(), 12f, hudCamera.viewportHeight - 166f);
-            drawTopLeftText("Enemy: " + floorGrid.getEnemyPaintedCellCount(), 12f, hudCamera.viewportHeight - 188f);
-            drawTopLeftText("Total: " + floorGrid.getTotalCellCount(), 12f, hudCamera.viewportHeight - 210f);
-            drawTopLeftText(String.format("Player Paint Rate: %.1f%%", floorGrid.getPlayerPaintRatePercent()), 12f, hudCamera.viewportHeight - 232f);
-            drawTopLeftText(String.format("Enemy Paint Rate: %.1f%%", floorGrid.getEnemyPaintRatePercent()), 12f, hudCamera.viewportHeight - 254f);
+            drawTopLeftText("Player: " + floorGrid.getPlayerPaintedCellCount(), 12f, hudCamera.viewportHeight - 160f);
+            drawTopLeftText("Enemy: " + floorGrid.getEnemyPaintedCellCount(), 12f, hudCamera.viewportHeight - 182f);
+            drawTopLeftText("Total: " + floorGrid.getTotalCellCount(), 12f, hudCamera.viewportHeight - 204f);
+            drawTopLeftText(String.format("Player Paint Rate: %.1f%%", floorGrid.getPlayerPaintRatePercent()), 12f, hudCamera.viewportHeight - 226f);
+            drawTopLeftText(String.format("Enemy Paint Rate: %.1f%%", floorGrid.getEnemyPaintRatePercent()), 12f, hudCamera.viewportHeight - 248f);
             if (DEBUG_MODE) {
-                drawTopLeftText("Current Color: " + getCurrentPaintColorLabel(), 12f, hudCamera.viewportHeight - 276f);
+                drawTopLeftText("Current Color: " + getCurrentPaintColorLabel(), 12f, hudCamera.viewportHeight - 270f);
             }
-            drawTopLeftText("Weapon: " + playerWeapon.getName(), 12f, hudCamera.viewportHeight - 298f);
-            drawTopLeftText("Move Speed: " + Player3D.MOVE_SPEED, 12f, hudCamera.viewportHeight - 320f);
-            drawTopLeftText("Enemy CPU: auto move and shoot", 12f, hudCamera.viewportHeight - 342f);
-            drawTopLeftText("Range: " + playerWeapon.getRange() + "  Bullet Speed: " + playerWeapon.getBulletSpeed(), 12f, hudCamera.viewportHeight - 364f);
-            drawTopLeftText("Paint Radius: " + playerWeapon.getPaintRadius() + "  Fire Interval: " + playerWeapon.getFireInterval(), 12f, hudCamera.viewportHeight - 386f);
-            drawTopLeftText("Bullets: " + bullets.size(), 12f, hudCamera.viewportHeight - 408f);
-            drawTopLeftText(
-                String.format("Camera Yaw: %.0f  Pitch: %.0f", cameraYaw, cameraPitch),
-                12f,
-                hudCamera.viewportHeight - 430f
-            );
-            drawTopLeftText("Camera: third-person follow", 12f, hudCamera.viewportHeight - 452f);
-            drawTopLeftText(
-                String.format("Player Position: %.1f, %.1f", player.getPosition().x, player.getPosition().z),
-                12f,
-                hudCamera.viewportHeight - 474f
-            );
-            drawTopLeftText(
-                String.format("Enemy Position: %.1f, %.1f", enemyCpu.getPosition().x, enemyCpu.getPosition().z),
-                12f,
-                hudCamera.viewportHeight - 496f
-            );
+            drawTopLeftText("Weapon: " + playerWeapon.getName(), 12f, hudCamera.viewportHeight - 292f);
+            drawTopLeftText("Enemy CPU: active", 12f, hudCamera.viewportHeight - 314f);
+            drawTopLeftText("Paint Radius: " + playerWeapon.getPaintRadius(), 12f, hudCamera.viewportHeight - 336f);
             drawTopLeftText(String.format("Time: %d", (int) Math.ceil(remainingTime)), hudCamera.viewportWidth - 120f, hudCamera.viewportHeight - 12f);
         } else if (flowState == GameFlowState.PAUSED) {
             drawTopLeftText(STEP_TEXT, 12f, hudCamera.viewportHeight - 12f);
@@ -392,12 +378,46 @@ public class Main3D implements ApplicationListener {
 
         shapeRenderer.setProjectionMatrix(hudCamera.combined);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
+        shapeRenderer.setColor(CROSSHAIR_SHADOW_COLOR);
+        shapeRenderer.line(
+            centerX - CROSSHAIR_GAP - CROSSHAIR_ARM_LENGTH + CROSSHAIR_SHADOW_OFFSET,
+            centerY - CROSSHAIR_SHADOW_OFFSET,
+            centerX - CROSSHAIR_GAP + CROSSHAIR_SHADOW_OFFSET,
+            centerY - CROSSHAIR_SHADOW_OFFSET
+        );
+        shapeRenderer.line(
+            centerX + CROSSHAIR_GAP + CROSSHAIR_SHADOW_OFFSET,
+            centerY - CROSSHAIR_SHADOW_OFFSET,
+            centerX + CROSSHAIR_GAP + CROSSHAIR_ARM_LENGTH + CROSSHAIR_SHADOW_OFFSET,
+            centerY - CROSSHAIR_SHADOW_OFFSET
+        );
+        shapeRenderer.line(
+            centerX + CROSSHAIR_SHADOW_OFFSET,
+            centerY - CROSSHAIR_GAP - CROSSHAIR_ARM_LENGTH - CROSSHAIR_SHADOW_OFFSET,
+            centerX + CROSSHAIR_SHADOW_OFFSET,
+            centerY - CROSSHAIR_GAP - CROSSHAIR_SHADOW_OFFSET
+        );
+        shapeRenderer.line(
+            centerX + CROSSHAIR_SHADOW_OFFSET,
+            centerY + CROSSHAIR_GAP - CROSSHAIR_SHADOW_OFFSET,
+            centerX + CROSSHAIR_SHADOW_OFFSET,
+            centerY + CROSSHAIR_GAP + CROSSHAIR_ARM_LENGTH - CROSSHAIR_SHADOW_OFFSET
+        );
+        shapeRenderer.circle(centerX + CROSSHAIR_SHADOW_OFFSET, centerY - CROSSHAIR_SHADOW_OFFSET, CROSSHAIR_CENTER_RADIUS);
+        shapeRenderer.end();
+
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
         shapeRenderer.setColor(CROSSHAIR_COLOR);
         shapeRenderer.line(centerX - CROSSHAIR_GAP - CROSSHAIR_ARM_LENGTH, centerY, centerX - CROSSHAIR_GAP, centerY);
         shapeRenderer.line(centerX + CROSSHAIR_GAP, centerY, centerX + CROSSHAIR_GAP + CROSSHAIR_ARM_LENGTH, centerY);
         shapeRenderer.line(centerX, centerY - CROSSHAIR_GAP - CROSSHAIR_ARM_LENGTH, centerX, centerY - CROSSHAIR_GAP);
         shapeRenderer.line(centerX, centerY + CROSSHAIR_GAP, centerX, centerY + CROSSHAIR_GAP + CROSSHAIR_ARM_LENGTH);
         shapeRenderer.circle(centerX, centerY, CROSSHAIR_CENTER_RADIUS);
+        shapeRenderer.end();
+
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        shapeRenderer.setColor(CROSSHAIR_CENTER_COLOR);
+        shapeRenderer.circle(centerX, centerY, CROSSHAIR_DOT_RADIUS);
         shapeRenderer.end();
     }
 

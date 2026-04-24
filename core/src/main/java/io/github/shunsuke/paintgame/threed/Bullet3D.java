@@ -18,11 +18,16 @@ import com.badlogic.gdx.utils.Disposable;
  * and disappears after a short distance.
  */
 public class Bullet3D implements Disposable {
-    private static final float SIZE = 0.18f;
-    private static final float SPAWN_HEIGHT_OFFSET = 0.12f;
-    private static final float SPAWN_FORWARD_OFFSET = 0.65f;
-    private static final Color PLAYER_BULLET_COLOR = new Color(0.25f, 0.7f, 0.95f, 1f);
-    private static final Color ENEMY_BULLET_COLOR = new Color(0.95f, 0.45f, 0.7f, 1f);
+    private static final float PLAYER_BULLET_WIDTH = 0.16f;
+    private static final float PLAYER_BULLET_HEIGHT = 0.16f;
+    private static final float PLAYER_BULLET_DEPTH = 0.34f;
+    private static final float ENEMY_BULLET_WIDTH = 0.2f;
+    private static final float ENEMY_BULLET_HEIGHT = 0.2f;
+    private static final float ENEMY_BULLET_DEPTH = 0.42f;
+    private static final float SPAWN_HEIGHT_OFFSET = 0.16f;
+    private static final float SPAWN_FORWARD_OFFSET = 0.72f;
+    private static final Color PLAYER_BULLET_COLOR = new Color(0.12f, 0.88f, 1f, 1f);
+    private static final Color ENEMY_BULLET_COLOR = new Color(1f, 0.3f, 0.62f, 1f);
     private static final Color DEFAULT_BULLET_COLOR = new Color(1f, 0.82f, 0.25f, 1f);
 
     private final Model model;
@@ -36,10 +41,13 @@ public class Bullet3D implements Disposable {
 
     public Bullet3D(Vector3 playerPosition, Vector3 facingDirection, WeaponConfig3D weaponConfig, int paintCellState) {
         ModelBuilder modelBuilder = new ModelBuilder();
+        float bulletWidth = getBulletWidth(paintCellState);
+        float bulletHeight = getBulletHeight(paintCellState);
+        float bulletDepth = getBulletDepth(paintCellState);
         model = modelBuilder.createBox(
-            SIZE,
-            SIZE,
-            SIZE,
+            bulletWidth,
+            bulletHeight,
+            bulletDepth,
             new Material(ColorAttribute.createDiffuse(getBulletColor(paintCellState))),
             Usage.Position | Usage.Normal
         );
@@ -98,7 +106,7 @@ public class Bullet3D implements Disposable {
     }
 
     private boolean isInsideFloorBounds(FloorGrid3D floorGrid) {
-        float margin = SIZE / 2f;
+        float margin = Math.max(getBulletWidth(paintCellState), getBulletDepth(paintCellState)) / 2f;
         return position.x >= floorGrid.getMinX() - margin
             && position.x <= floorGrid.getMaxX() + margin
             && position.z >= floorGrid.getMinZ() - margin
@@ -110,7 +118,10 @@ public class Bullet3D implements Disposable {
     }
 
     private void updateTransform() {
-        instance.transform.setToTranslation(position);
+        float facingAngleDegrees = (float) Math.toDegrees(Math.atan2(direction.x, -direction.z));
+        instance.transform.idt();
+        instance.transform.translate(position);
+        instance.transform.rotate(Vector3.Y, facingAngleDegrees);
     }
 
     private Color getBulletColor(int cellState) {
@@ -121,5 +132,26 @@ public class Bullet3D implements Disposable {
             return ENEMY_BULLET_COLOR;
         }
         return DEFAULT_BULLET_COLOR;
+    }
+
+    private float getBulletWidth(int cellState) {
+        if (cellState == FloorGrid3D.CELL_STATE_ENEMY) {
+            return ENEMY_BULLET_WIDTH;
+        }
+        return PLAYER_BULLET_WIDTH;
+    }
+
+    private float getBulletHeight(int cellState) {
+        if (cellState == FloorGrid3D.CELL_STATE_ENEMY) {
+            return ENEMY_BULLET_HEIGHT;
+        }
+        return PLAYER_BULLET_HEIGHT;
+    }
+
+    private float getBulletDepth(int cellState) {
+        if (cellState == FloorGrid3D.CELL_STATE_ENEMY) {
+            return ENEMY_BULLET_DEPTH;
+        }
+        return PLAYER_BULLET_DEPTH;
     }
 }

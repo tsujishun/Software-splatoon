@@ -26,9 +26,12 @@ public class FloorGrid3D implements Disposable {
     private static final float TILE_SIZE = 1f;
     private static final float TILE_HEIGHT = 0.15f;
     private static final float TILE_GAP = 0.05f;
-    private static final Color EMPTY_TILE_COLOR = new Color(0.2f, 0.22f, 0.27f, 1f);
-    private static final Color PLAYER_TILE_COLOR = new Color(0.25f, 0.7f, 0.95f, 1f);
-    private static final Color ENEMY_TILE_COLOR = new Color(0.95f, 0.45f, 0.7f, 1f);
+    private static final float PAINT_FLASH_DURATION = 0.22f;
+    private static final float PAINT_RADIUS_VISUAL_BONUS = 0.08f;
+    private static final float PAINT_FLASH_BRIGHTNESS = 0.45f;
+    private static final Color EMPTY_TILE_COLOR = new Color(0.16f, 0.18f, 0.23f, 1f);
+    private static final Color PLAYER_TILE_COLOR = new Color(0.16f, 0.8f, 1f, 1f);
+    private static final Color ENEMY_TILE_COLOR = new Color(1f, 0.36f, 0.66f, 1f);
 
     private final int columns;
     private final int rows;
@@ -71,13 +74,25 @@ public class FloorGrid3D implements Disposable {
         }
     }
 
+    public void update(float delta) {
+        for (Tile3D tile : tiles) {
+            if (tile.paintFlashTimer <= 0f) {
+                continue;
+            }
+
+            tile.paintFlashTimer = Math.max(0f, tile.paintFlashTimer - delta);
+            applyTileColor(tile, cellStates[tile.row][tile.column], tile.paintFlashTimer / PAINT_FLASH_DURATION);
+        }
+    }
+
     public void reset() {
         playerPaintedCellCount = 0;
         enemyPaintedCellCount = 0;
 
         for (Tile3D tile : tiles) {
             cellStates[tile.row][tile.column] = CELL_STATE_EMPTY;
-            setInstanceColor(tile.instance, EMPTY_TILE_COLOR);
+            tile.paintFlashTimer = 0f;
+            applyTileColor(tile, CELL_STATE_EMPTY, 0f);
         }
     }
 
@@ -96,7 +111,8 @@ public class FloorGrid3D implements Disposable {
         addPaintedCellCount(cellState);
 
         Tile3D tile = tiles.get(row * columns + column);
-        setInstanceColor(tile.instance, getTileColor(cellState));
+        tile.paintFlashTimer = PAINT_FLASH_DURATION;
+        applyTileColor(tile, cellState, 1f);
     }
 
     public void paintAtWorldPosition(float worldX, float worldZ, int cellState) {
@@ -108,14 +124,19 @@ public class FloorGrid3D implements Disposable {
             return;
         }
 
-        int minColumn = MathUtils.clamp((int) ((worldX - radius - minX) / TILE_SIZE), 0, columns - 1);
-        int maxColumn = MathUtils.clamp((int) ((worldX + radius - minX) / TILE_SIZE), 0, columns - 1);
-        int minRow = MathUtils.clamp((int) ((worldZ - radius - minZ) / TILE_SIZE), 0, rows - 1);
-        int maxRow = MathUtils.clamp((int) ((worldZ + radius - minZ) / TILE_SIZE), 0, rows - 1);
+        float effectiveRadius = radius;
+        if (effectiveRadius > 0f) {
+            effectiveRadius += PAINT_RADIUS_VISUAL_BONUS;
+        }
+
+        int minColumn = MathUtils.clamp((int) ((worldX - effectiveRadius - minX) / TILE_SIZE), 0, columns - 1);
+        int maxColumn = MathUtils.clamp((int) ((worldX + effectiveRadius - minX) / TILE_SIZE), 0, columns - 1);
+        int minRow = MathUtils.clamp((int) ((worldZ - effectiveRadius - minZ) / TILE_SIZE), 0, rows - 1);
+        int maxRow = MathUtils.clamp((int) ((worldZ + effectiveRadius - minZ) / TILE_SIZE), 0, rows - 1);
 
         for (int row = minRow; row <= maxRow; row++) {
             for (int column = minColumn; column <= maxColumn; column++) {
-                if (doesCircleTouchTile(worldX, worldZ, radius, row, column)) {
+                if (doesCircleTouchTile(worldX, worldZ, effectiveRadius, row, column)) {
                     setCellState(row, column, cellState);
                 }
             }
@@ -227,10 +248,6 @@ public class FloorGrid3D implements Disposable {
         }
     }
 
-    private void setInstanceColor(ModelInstance instance, Color color) {
-        instance.materials.get(0).set(ColorAttribute.createDiffuse(color));
-    }
-
     private boolean doesCircleTouchTile(float worldX, float worldZ, float radius, int row, int column) {
         float tileMinX = minX + column * TILE_SIZE;
         float tileMaxX = tileMinX + TILE_SIZE;
@@ -254,10 +271,20 @@ public class FloorGrid3D implements Disposable {
         return EMPTY_TILE_COLOR;
     }
 
+    private void applyTileColor(Tile3D tile, int cellState, float flashRatio) {
+        tile.displayColor.set(getTileColor(cellState));
+        if (flashRatio > 0f) {
+            tile.displayColor.lerp(Color.WHITE, flashRatio * PAINT_FLASH_BRIGHTNESS);
+        }
+        tile.instance.materials.get(0).set(ColorAttribute.createDiffuse(tile.displayColor));
+    }
+
     private static class Tile3D {
         private final int row;
         private final int column;
         private final ModelInstance instance;
+        private final Color displayColor = new Color();
+        private float paintFlashTimer;
 
         private Tile3D(int row, int column, ModelInstance instance) {
             this.row = row;
