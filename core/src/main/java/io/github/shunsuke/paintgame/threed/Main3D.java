@@ -14,7 +14,6 @@ import com.badlogic.gdx.graphics.g3d.Environment;
 import com.badlogic.gdx.graphics.g3d.ModelBatch;
 import com.badlogic.gdx.graphics.g3d.attributes.ColorAttribute;
 import com.badlogic.gdx.graphics.g3d.environment.DirectionalLight;
-import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector3;
 
 /**
@@ -24,12 +23,14 @@ import com.badlogic.gdx.math.Vector3;
 public class Main3D implements ApplicationListener {
     private static final String TITLE_TEXT = "Paint Battle 3D Prototype";
     private static final String TITLE_PROMPT_TEXT = "Press Enter to Start";
-    private static final String STEP_TEXT = "Step 1: 3D Floor and Camera";
-    private static final String PLAY_TEXT = "3D foundation ready. Next step: player movement.";
+    private static final String STEP_TEXT = "Step 2: 3D Player Movement";
+    private static final String PLAY_TEXT = "WASD / Arrows: Move on the floor";
     private static final String RETURN_TEXT = "Press R to return to the title screen";
     private static final float COUNTDOWN_TOTAL_SECONDS = 4f;
+    private static final float CAMERA_HEIGHT_MULTIPLIER = 1.1f;
+    private static final float CAMERA_DEPTH_MULTIPLIER = 0.8f;
+    private static final float CAMERA_LOOK_AHEAD = 1.2f;
     private static final Color CLEAR_COLOR = new Color(0.08f, 0.1f, 0.14f, 1f);
-    private static final Vector3 LOOK_AT_TARGET = new Vector3(0f, 0f, 0f);
 
     private ModelBatch modelBatch;
     private Environment environment;
@@ -39,6 +40,9 @@ public class Main3D implements ApplicationListener {
     private BitmapFont font;
     private GlyphLayout glyphLayout;
     private FloorGrid3D floorGrid;
+    private Player3D player;
+    private final Vector3 cameraOffset = new Vector3();
+    private final Vector3 cameraTarget = new Vector3();
 
     private GameFlowState flowState;
     private float countdownTimer;
@@ -56,6 +60,7 @@ public class Main3D implements ApplicationListener {
         environment.add(new DirectionalLight().set(0.7f, 0.7f, 0.75f, -1f, -0.8f, -0.3f));
 
         floorGrid = new FloorGrid3D(12, 12);
+        player = new Player3D();
         flowState = GameFlowState.TITLE;
         countdownTimer = COUNTDOWN_TOTAL_SECONDS;
 
@@ -75,9 +80,8 @@ public class Main3D implements ApplicationListener {
         worldCamera.viewportHeight = height;
 
         float stageSize = Math.max(floorGrid.getWorldWidth(), floorGrid.getWorldDepth());
-        worldCamera.position.set(0f, stageSize * 1.25f, stageSize * 0.95f);
-        worldCamera.lookAt(LOOK_AT_TARGET);
-        worldCamera.up.set(Vector3.Y);
+        cameraOffset.set(0f, stageSize * CAMERA_HEIGHT_MULTIPLIER, stageSize * CAMERA_DEPTH_MULTIPLIER);
+        updateCameraPosition();
         worldCamera.near = 0.1f;
         worldCamera.far = 80f;
         worldCamera.update();
@@ -100,9 +104,13 @@ public class Main3D implements ApplicationListener {
         Gdx.gl.glClearColor(CLEAR_COLOR.r, CLEAR_COLOR.g, CLEAR_COLOR.b, CLEAR_COLOR.a);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT | GL20.GL_DEPTH_BUFFER_BIT);
 
+        updateCameraPosition();
         worldCamera.update();
         modelBatch.begin(worldCamera);
         floorGrid.render(modelBatch, environment);
+        if (flowState != GameFlowState.TITLE) {
+            player.render(modelBatch, environment);
+        }
         modelBatch.end();
 
         hudCamera.update();
@@ -134,6 +142,9 @@ public class Main3D implements ApplicationListener {
         if (floorGrid != null) {
             floorGrid.dispose();
         }
+        if (player != null) {
+            player.dispose();
+        }
     }
 
     private void handleGlobalInput() {
@@ -156,6 +167,11 @@ public class Main3D implements ApplicationListener {
                 countdownTimer = 0f;
                 flowState = GameFlowState.PLAYING;
             }
+            return;
+        }
+
+        if (flowState == GameFlowState.PLAYING) {
+            player.update(delta, floorGrid);
         }
     }
 
@@ -174,12 +190,13 @@ public class Main3D implements ApplicationListener {
         } else if (flowState == GameFlowState.PLAYING) {
             drawTopLeftText(STEP_TEXT, 12f, hudCamera.viewportHeight - 12f);
             drawTopLeftText(PLAY_TEXT, 12f, hudCamera.viewportHeight - 34f);
-            drawTopLeftText(RETURN_TEXT, 12f, hudCamera.viewportHeight - 56f);
-            drawTopLeftText("Tiles: " + (int) floorGrid.getWorldWidth() + " x " + (int) floorGrid.getWorldDepth(), 12f, hudCamera.viewportHeight - 78f);
+            drawTopLeftText("Move Speed: " + Player3D.MOVE_SPEED, 12f, hudCamera.viewportHeight - 56f);
+            drawTopLeftText(RETURN_TEXT, 12f, hudCamera.viewportHeight - 78f);
+            drawTopLeftText("Tiles: " + (int) floorGrid.getWorldWidth() + " x " + (int) floorGrid.getWorldDepth(), 12f, hudCamera.viewportHeight - 100f);
             drawTopLeftText(
-                "Player " + floorGrid.getPlayerPaintedCellCount() + " / Enemy " + floorGrid.getEnemyPaintedCellCount(),
+                String.format("Player Position: %.1f, %.1f", player.getPosition().x, player.getPosition().z),
                 12f,
-                hudCamera.viewportHeight - 100f
+                hudCamera.viewportHeight - 122f
             );
         }
 
@@ -198,12 +215,14 @@ public class Main3D implements ApplicationListener {
 
     private void goToTitleScreen() {
         floorGrid.reset();
+        player.reset();
         flowState = GameFlowState.TITLE;
         countdownTimer = COUNTDOWN_TOTAL_SECONDS;
     }
 
     private void startCountdown() {
         floorGrid.reset();
+        player.reset();
         flowState = GameFlowState.COUNTDOWN;
         countdownTimer = COUNTDOWN_TOTAL_SECONDS;
     }
@@ -219,5 +238,17 @@ public class Main3D implements ApplicationListener {
             return "1";
         }
         return "GO!";
+    }
+
+    private void updateCameraPosition() {
+        Vector3 playerPosition = player.getPosition();
+        worldCamera.position.set(
+            playerPosition.x + cameraOffset.x,
+            playerPosition.y + cameraOffset.y,
+            playerPosition.z + cameraOffset.z
+        );
+        worldCamera.up.set(Vector3.Y);
+        cameraTarget.set(playerPosition).mulAdd(player.getFacingDirection(), CAMERA_LOOK_AHEAD);
+        worldCamera.lookAt(cameraTarget);
     }
 }

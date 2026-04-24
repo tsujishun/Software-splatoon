@@ -34,6 +34,10 @@ public class FloorGrid3D implements Disposable {
     private final int[][] cellStates;
     private final ArrayList<Tile3D> tiles = new ArrayList<>();
     private final Model tileModel;
+    private final float minX;
+    private final float maxX;
+    private final float minZ;
+    private final float maxZ;
 
     private int playerPaintedCellCount;
     private int enemyPaintedCellCount;
@@ -42,6 +46,10 @@ public class FloorGrid3D implements Disposable {
         this.columns = columns;
         this.rows = rows;
         this.cellStates = new int[rows][columns];
+        this.minX = -columns * TILE_SIZE / 2f;
+        this.maxX = columns * TILE_SIZE / 2f;
+        this.minZ = -rows * TILE_SIZE / 2f;
+        this.maxZ = rows * TILE_SIZE / 2f;
 
         ModelBuilder modelBuilder = new ModelBuilder();
         tileModel = modelBuilder.createBox(
@@ -104,6 +112,22 @@ public class FloorGrid3D implements Disposable {
 
     public float getWorldDepth() {
         return rows * TILE_SIZE;
+    }
+
+    public float getMinX() {
+        return minX;
+    }
+
+    public float getMaxX() {
+        return maxX;
+    }
+
+    public float getMinZ() {
+        return minZ;
+    }
+
+    public float getMaxZ() {
+        return maxZ;
     }
 
     @Override
