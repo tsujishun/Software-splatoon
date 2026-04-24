@@ -8,5 +8,6 @@ public enum GameFlowState {
     TITLE,
     COUNTDOWN,
     PLAYING,
+    PAUSED,
     GAME_OVER
 }
