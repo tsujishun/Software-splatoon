@@ -19,6 +19,10 @@ import com.badlogic.gdx.utils.Disposable;
  */
 public class EnemyCpu3D implements Disposable {
     public static final float MOVE_SPEED = 2.8f;
+    public static final int MAX_HP = 3;
+    public static final float HIT_RADIUS = 0.42f;
+    public static final float RESPAWN_SECONDS = 2.6f;
+    public static final float INVINCIBLE_SECONDS = 1.1f;
 
     private static final float ENEMY_DIAMETER = 0.7f;
     private static final float EDGE_MARGIN = 0.35f;
@@ -30,12 +34,17 @@ public class EnemyCpu3D implements Disposable {
     private final Model model;
     private final ModelInstance instance;
     private final Vector3 position = new Vector3();
+    private final Vector3 spawnPosition = new Vector3();
     private final Vector3 facingDirection = new Vector3(0f, 0f, -1f);
     private final Vector3 moveDirection = new Vector3(0f, 0f, -1f);
     private final Vector3 nextPosition = new Vector3();
     private final Vector3 centerDirection = new Vector3();
 
     private float directionChangeTimer;
+    private int hp;
+    private boolean splatted;
+    private float respawnTimer;
+    private float invincibleTimer;
 
     public EnemyCpu3D() {
         ModelBuilder modelBuilder = new ModelBuilder();
@@ -52,6 +61,11 @@ public class EnemyCpu3D implements Disposable {
     }
 
     public void update(float delta, FloorGrid3D floorGrid) {
+        updateTimers(delta, floorGrid);
+        if (splatted) {
+            return;
+        }
+
         directionChangeTimer -= delta;
         if (directionChangeTimer <= 0f) {
             chooseRandomDirection();
@@ -79,23 +93,55 @@ public class EnemyCpu3D implements Disposable {
     }
 
     public void render(ModelBatch modelBatch, Environment environment) {
+        if (splatted) {
+            return;
+        }
         modelBatch.render(instance, environment);
     }
 
     public void reset(FloorGrid3D floorGrid) {
-        float radius = ENEMY_DIAMETER / 2f;
-        float minX = floorGrid.getMinX() + radius;
-        float maxX = floorGrid.getMaxX() - radius;
-        float minZ = floorGrid.getMinZ() + radius;
-        float maxZ = floorGrid.getMaxZ() - radius;
-
-        position.set(
-            MathUtils.clamp(maxX - SPAWN_INSET, minX, maxX),
-            radius,
-            MathUtils.clamp(maxZ - SPAWN_INSET, minZ, maxZ)
-        );
+        hp = MAX_HP;
+        splatted = false;
+        respawnTimer = 0f;
+        invincibleTimer = 0f;
+        setSpawnPosition(floorGrid);
+        position.set(spawnPosition);
         chooseDirectionTowardCenter();
         updateTransform();
+    }
+
+    public int getHp() {
+        return hp;
+    }
+
+    public float getHitRadius() {
+        return HIT_RADIUS;
+    }
+
+    public boolean isSplatted() {
+        return splatted;
+    }
+
+    public boolean isInvincible() {
+        return invincibleTimer > 0f;
+    }
+
+    public boolean takeHit() {
+        if (splatted || isInvincible()) {
+            return false;
+        }
+
+        hp = Math.max(0, hp - 1);
+        if (hp <= 0) {
+            splatted = true;
+            respawnTimer = RESPAWN_SECONDS;
+            return true;
+        }
+        return false;
+    }
+
+    public float getRespawnTimer() {
+        return respawnTimer;
     }
 
     public Vector3 getPosition() {
@@ -109,6 +155,45 @@ public class EnemyCpu3D implements Disposable {
     @Override
     public void dispose() {
         model.dispose();
+    }
+
+    private void updateTimers(float delta, FloorGrid3D floorGrid) {
+        if (invincibleTimer > 0f) {
+            invincibleTimer = Math.max(0f, invincibleTimer - delta);
+        }
+
+        if (!splatted) {
+            return;
+        }
+
+        respawnTimer = Math.max(0f, respawnTimer - delta);
+        if (respawnTimer <= 0f) {
+            respawn(floorGrid);
+        }
+    }
+
+    private void respawn(FloorGrid3D floorGrid) {
+        setSpawnPosition(floorGrid);
+        position.set(spawnPosition);
+        hp = MAX_HP;
+        splatted = false;
+        invincibleTimer = INVINCIBLE_SECONDS;
+        chooseDirectionTowardCenter();
+        updateTransform();
+    }
+
+    private void setSpawnPosition(FloorGrid3D floorGrid) {
+        float radius = ENEMY_DIAMETER / 2f;
+        float minX = floorGrid.getMinX() + radius;
+        float maxX = floorGrid.getMaxX() - radius;
+        float minZ = floorGrid.getMinZ() + radius;
+        float maxZ = floorGrid.getMaxZ() - radius;
+
+        spawnPosition.set(
+            MathUtils.clamp(maxX - SPAWN_INSET, minX, maxX),
+            radius,
+            MathUtils.clamp(maxZ - SPAWN_INSET, minZ, maxZ)
+        );
     }
 
     private boolean isNearFloorEdge(FloorGrid3D floorGrid, float radius) {

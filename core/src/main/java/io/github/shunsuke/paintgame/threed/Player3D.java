@@ -19,6 +19,10 @@ import com.badlogic.gdx.utils.Disposable;
  */
 public class Player3D implements Disposable {
     public static final float MOVE_SPEED = 4.5f;
+    public static final int MAX_HP = 3;
+    public static final float HIT_RADIUS = 0.42f;
+    public static final float RESPAWN_SECONDS = 2.2f;
+    public static final float INVINCIBLE_SECONDS = 1.2f;
 
     private static final float PLAYER_WIDTH = 0.52f;
     private static final float PLAYER_HEIGHT = 0.9f;
@@ -28,9 +32,15 @@ public class Player3D implements Disposable {
     private final Model model;
     private final ModelInstance instance;
     private final Vector3 position = new Vector3();
+    private final Vector3 spawnPosition = new Vector3();
     private final Vector3 facingDirection = new Vector3(0f, 0f, -1f);
     private final Vector3 moveDirection = new Vector3();
     private final Vector3 sideDirection = new Vector3();
+
+    private int hp;
+    private boolean splatted;
+    private float respawnTimer;
+    private float invincibleTimer;
 
     public Player3D() {
         ModelBuilder modelBuilder = new ModelBuilder();
@@ -46,6 +56,11 @@ public class Player3D implements Disposable {
     }
 
     public void update(float delta, FloorGrid3D floorGrid, float moveForward, float moveSide, Vector3 cameraForward, Vector3 cameraRight) {
+        updateTimers(delta);
+        if (splatted) {
+            return;
+        }
+
         if (moveForward != 0f || moveSide != 0f) {
             // Convert keyboard input into a direction based on the camera's horizontal view.
             moveDirection.set(cameraForward).scl(moveForward);
@@ -66,12 +81,20 @@ public class Player3D implements Disposable {
     }
 
     public void render(ModelBatch modelBatch, Environment environment) {
+        if (splatted) {
+            return;
+        }
         modelBatch.render(instance, environment);
     }
 
     public void reset() {
-        position.set(0f, PLAYER_HEIGHT / 2f, 0f);
+        spawnPosition.set(0f, PLAYER_HEIGHT / 2f, 0f);
+        position.set(spawnPosition);
         facingDirection.set(0f, 0f, -1f);
+        hp = MAX_HP;
+        splatted = false;
+        respawnTimer = 0f;
+        invincibleTimer = 0f;
         updateTransform();
     }
 
@@ -89,9 +112,66 @@ public class Player3D implements Disposable {
         }
     }
 
+    public int getHp() {
+        return hp;
+    }
+
+    public float getHitRadius() {
+        return HIT_RADIUS;
+    }
+
+    public boolean isSplatted() {
+        return splatted;
+    }
+
+    public boolean isInvincible() {
+        return invincibleTimer > 0f;
+    }
+
+    public float getRespawnTimer() {
+        return respawnTimer;
+    }
+
+    public boolean takeHit() {
+        if (splatted || isInvincible()) {
+            return false;
+        }
+
+        hp = Math.max(0, hp - 1);
+        if (hp <= 0) {
+            splatted = true;
+            respawnTimer = RESPAWN_SECONDS;
+            return true;
+        }
+        return false;
+    }
+
     @Override
     public void dispose() {
         model.dispose();
+    }
+
+    private void updateTimers(float delta) {
+        if (invincibleTimer > 0f) {
+            invincibleTimer = Math.max(0f, invincibleTimer - delta);
+        }
+
+        if (!splatted) {
+            return;
+        }
+
+        respawnTimer = Math.max(0f, respawnTimer - delta);
+        if (respawnTimer <= 0f) {
+            respawn();
+        }
+    }
+
+    private void respawn() {
+        position.set(spawnPosition);
+        hp = MAX_HP;
+        splatted = false;
+        invincibleTimer = INVINCIBLE_SECONDS;
+        updateTransform();
     }
 
     private void updateTransform() {

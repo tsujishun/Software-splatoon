@@ -18,6 +18,9 @@ import com.badlogic.gdx.utils.Disposable;
  * and disappears after a short distance.
  */
 public class Bullet3D implements Disposable {
+    public static final int OWNER_PLAYER = 1;
+    public static final int OWNER_ENEMY = 2;
+
     private static final float PLAYER_BULLET_WIDTH = 0.16f;
     private static final float PLAYER_BULLET_HEIGHT = 0.16f;
     private static final float PLAYER_BULLET_DEPTH = 0.34f;
@@ -35,11 +38,18 @@ public class Bullet3D implements Disposable {
     private final Vector3 position = new Vector3();
     private final Vector3 direction = new Vector3();
     private final WeaponConfig3D weaponConfig;
+    private final int ownerType;
     private final int paintCellState;
 
     private float traveledDistance;
 
-    public Bullet3D(Vector3 playerPosition, Vector3 facingDirection, WeaponConfig3D weaponConfig, int paintCellState) {
+    public Bullet3D(
+        Vector3 playerPosition,
+        Vector3 facingDirection,
+        WeaponConfig3D weaponConfig,
+        int ownerType,
+        int paintCellState
+    ) {
         ModelBuilder modelBuilder = new ModelBuilder();
         float bulletWidth = getBulletWidth(paintCellState);
         float bulletHeight = getBulletHeight(paintCellState);
@@ -53,6 +63,7 @@ public class Bullet3D implements Disposable {
         );
         instance = new ModelInstance(model);
         this.weaponConfig = weaponConfig;
+        this.ownerType = ownerType;
         this.paintCellState = paintCellState;
 
         // Only use the horizontal part of the aim so the bullet stays on the floor plane for now.
@@ -98,6 +109,18 @@ public class Bullet3D implements Disposable {
 
     public void render(ModelBatch modelBatch, Environment environment) {
         modelBatch.render(instance, environment);
+    }
+
+    public Vector3 getPosition() {
+        return position;
+    }
+
+    public int getOwnerType() {
+        return ownerType;
+    }
+
+    public int getPaintCellState() {
+        return paintCellState;
     }
 
     @Override
