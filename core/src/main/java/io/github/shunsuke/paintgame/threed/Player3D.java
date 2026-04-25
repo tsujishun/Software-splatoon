@@ -19,6 +19,9 @@ import com.badlogic.gdx.utils.Disposable;
  */
 public class Player3D implements Disposable {
     public static final float MOVE_SPEED = 4.5f;
+    public static final float OWN_PAINT_SPEED_MULTIPLIER = 1.15f;
+    public static final float ENEMY_PAINT_SPEED_MULTIPLIER = 0.78f;
+    public static final float NEUTRAL_SPEED_MULTIPLIER = 1f;
     public static final int MAX_HP = 3;
     public static final float HIT_RADIUS = 0.42f;
     public static final float RESPAWN_SECONDS = 2.2f;
@@ -67,8 +70,12 @@ public class Player3D implements Disposable {
             sideDirection.set(cameraRight).scl(moveSide);
             moveDirection.add(sideDirection).nor();
 
-            position.x += moveDirection.x * MOVE_SPEED * delta;
-            position.z += moveDirection.z * MOVE_SPEED * delta;
+            // Moving on your own paint should feel better, while enemy paint should slow you down.
+            float speedMultiplier = getGroundSpeedMultiplier(floorGrid.getCellStateAtWorldPosition(position.x, position.z));
+            float moveSpeed = MOVE_SPEED * speedMultiplier;
+
+            position.x += moveDirection.x * moveSpeed * delta;
+            position.z += moveDirection.z * moveSpeed * delta;
         }
 
         // Keep the player inside the floor so the early 3D prototype is easy to control.
@@ -179,5 +186,15 @@ public class Player3D implements Disposable {
         instance.transform.idt();
         instance.transform.translate(position);
         instance.transform.rotate(Vector3.Y, facingAngleDegrees);
+    }
+
+    private float getGroundSpeedMultiplier(int groundCellState) {
+        if (groundCellState == FloorGrid3D.CELL_STATE_PLAYER) {
+            return OWN_PAINT_SPEED_MULTIPLIER;
+        }
+        if (groundCellState == FloorGrid3D.CELL_STATE_ENEMY) {
+            return ENEMY_PAINT_SPEED_MULTIPLIER;
+        }
+        return NEUTRAL_SPEED_MULTIPLIER;
     }
 }

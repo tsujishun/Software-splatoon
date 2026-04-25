@@ -19,6 +19,9 @@ import com.badlogic.gdx.utils.Disposable;
  */
 public class EnemyCpu3D implements Disposable {
     public static final float MOVE_SPEED = 2.8f;
+    public static final float OWN_PAINT_SPEED_MULTIPLIER = 1.15f;
+    public static final float ENEMY_PAINT_SPEED_MULTIPLIER = 0.78f;
+    public static final float NEUTRAL_SPEED_MULTIPLIER = 1f;
     public static final int MAX_HP = 3;
     public static final float HIT_RADIUS = 0.42f;
     public static final float RESPAWN_SECONDS = 2.6f;
@@ -71,7 +74,9 @@ public class EnemyCpu3D implements Disposable {
             chooseRandomDirection();
         }
 
-        nextPosition.set(position).mulAdd(moveDirection, MOVE_SPEED * delta);
+        float speedMultiplier = getGroundSpeedMultiplier(floorGrid.getCellStateAtWorldPosition(position.x, position.z));
+        float moveSpeed = MOVE_SPEED * speedMultiplier;
+        nextPosition.set(position).mulAdd(moveDirection, moveSpeed * delta);
 
         float radius = ENEMY_DIAMETER / 2f;
         float minX = floorGrid.getMinX() + radius;
@@ -226,5 +231,15 @@ public class EnemyCpu3D implements Disposable {
 
     private void updateTransform() {
         instance.transform.setToTranslation(position);
+    }
+
+    private float getGroundSpeedMultiplier(int groundCellState) {
+        if (groundCellState == FloorGrid3D.CELL_STATE_ENEMY) {
+            return OWN_PAINT_SPEED_MULTIPLIER;
+        }
+        if (groundCellState == FloorGrid3D.CELL_STATE_PLAYER) {
+            return ENEMY_PAINT_SPEED_MULTIPLIER;
+        }
+        return NEUTRAL_SPEED_MULTIPLIER;
     }
 }

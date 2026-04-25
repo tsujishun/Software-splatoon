@@ -186,6 +186,16 @@ public class FloorGrid3D implements Disposable {
         return enemyPaintedCellCount * 100f / totalCellCount;
     }
 
+    public int getCellStateAtWorldPosition(float worldX, float worldZ) {
+        if (worldX < minX || worldX >= maxX || worldZ < minZ || worldZ >= maxZ) {
+            return CELL_STATE_EMPTY;
+        }
+
+        int column = MathUtils.clamp((int) ((worldX - minX) / TILE_SIZE), 0, columns - 1);
+        int row = MathUtils.clamp((int) ((worldZ - minZ) / TILE_SIZE), 0, rows - 1);
+        return cellStates[row][column];
+    }
+
     public float getWorldWidth() {
         return columns * TILE_SIZE;
     }
