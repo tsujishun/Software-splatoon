@@ -29,7 +29,7 @@ public class Main3D implements ApplicationListener {
     private static final boolean DEBUG_MODE = false;
     private static final String TITLE_TEXT = "Paint Battle 3D Prototype";
     private static final String TITLE_PROMPT_TEXT = "Press Enter to Start";
-    private static final String STEP_TEXT = "Step 14: Ground Paint Movement Bonus";
+    private static final String STEP_TEXT = "Step 15: Ink and Recovery";
     private static final String TITLE_CONTROL_MOVE_TEXT = "WASD: Move";
     private static final String TITLE_CONTROL_LOOK_TEXT = "Mouse: Look";
     private static final String TITLE_CONTROL_SHOOT_TEXT = "Space: Shoot";
@@ -318,15 +318,16 @@ public class Main3D implements ApplicationListener {
             drawTopLeftText("Player: " + floorGrid.getPlayerPaintedCellCount(), 12f, hudCamera.viewportHeight - 160f);
             drawTopLeftText("Enemy: " + floorGrid.getEnemyPaintedCellCount(), 12f, hudCamera.viewportHeight - 182f);
             drawTopLeftText("Player HP: " + player.getHp(), 12f, hudCamera.viewportHeight - 204f);
-            drawTopLeftText("Enemy HP: " + enemyCpu.getHp(), 12f, hudCamera.viewportHeight - 226f);
-            drawTopLeftText("Ground: " + getGroundStateLabel(player.getPosition()), 12f, hudCamera.viewportHeight - 248f);
-            drawTopLeftText("Player Splats: " + playerSplatCount, 12f, hudCamera.viewportHeight - 270f);
-            drawTopLeftText("Enemy Splats: " + enemySplatCount, 12f, hudCamera.viewportHeight - 292f);
-            drawTopLeftText("Total: " + floorGrid.getTotalCellCount(), 12f, hudCamera.viewportHeight - 314f);
-            drawTopLeftText(String.format("Player Paint Rate: %.1f%%", floorGrid.getPlayerPaintRatePercent()), 12f, hudCamera.viewportHeight - 336f);
-            drawTopLeftText(String.format("Enemy Paint Rate: %.1f%%", floorGrid.getEnemyPaintRatePercent()), 12f, hudCamera.viewportHeight - 358f);
+            drawTopLeftText(String.format("Ink: %.0f / %.0f", player.getInkAmount(), Player3D.MAX_INK_AMOUNT), 12f, hudCamera.viewportHeight - 226f);
+            drawTopLeftText("Enemy HP: " + enemyCpu.getHp(), 12f, hudCamera.viewportHeight - 248f);
+            drawTopLeftText("Ground: " + getGroundStateLabel(player.getPosition()), 12f, hudCamera.viewportHeight - 270f);
+            drawTopLeftText("Player Splats: " + playerSplatCount, 12f, hudCamera.viewportHeight - 292f);
+            drawTopLeftText("Enemy Splats: " + enemySplatCount, 12f, hudCamera.viewportHeight - 314f);
+            drawTopLeftText("Total: " + floorGrid.getTotalCellCount(), 12f, hudCamera.viewportHeight - 336f);
+            drawTopLeftText(String.format("Player Paint Rate: %.1f%%", floorGrid.getPlayerPaintRatePercent()), 12f, hudCamera.viewportHeight - 358f);
+            drawTopLeftText(String.format("Enemy Paint Rate: %.1f%%", floorGrid.getEnemyPaintRatePercent()), 12f, hudCamera.viewportHeight - 380f);
             if (DEBUG_MODE) {
-                drawTopLeftText("Current Color: " + getCurrentPaintColorLabel(), 12f, hudCamera.viewportHeight - 380f);
+                drawTopLeftText("Current Color: " + getCurrentPaintColorLabel(), 12f, hudCamera.viewportHeight - 402f);
             }
             drawTopLeftText(String.format("Time: %d", (int) Math.ceil(remainingTime)), hudCamera.viewportWidth - 120f, hudCamera.viewportHeight - 12f);
             if (player.isSplatted()) {
@@ -341,13 +342,14 @@ public class Main3D implements ApplicationListener {
             drawTopLeftText("Player: " + floorGrid.getPlayerPaintedCellCount(), 12f, hudCamera.viewportHeight - 34f);
             drawTopLeftText("Enemy: " + floorGrid.getEnemyPaintedCellCount(), 12f, hudCamera.viewportHeight - 56f);
             drawTopLeftText("Player HP: " + player.getHp(), 12f, hudCamera.viewportHeight - 78f);
-            drawTopLeftText("Enemy HP: " + enemyCpu.getHp(), 12f, hudCamera.viewportHeight - 100f);
-            drawTopLeftText("Ground: " + getGroundStateLabel(player.getPosition()), 12f, hudCamera.viewportHeight - 122f);
-            drawTopLeftText("Player Splats: " + playerSplatCount, 12f, hudCamera.viewportHeight - 144f);
-            drawTopLeftText("Enemy Splats: " + enemySplatCount, 12f, hudCamera.viewportHeight - 166f);
-            drawTopLeftText("Total: " + floorGrid.getTotalCellCount(), 12f, hudCamera.viewportHeight - 188f);
-            drawTopLeftText(String.format("Player Paint Rate: %.1f%%", floorGrid.getPlayerPaintRatePercent()), 12f, hudCamera.viewportHeight - 210f);
-            drawTopLeftText(String.format("Enemy Paint Rate: %.1f%%", floorGrid.getEnemyPaintRatePercent()), 12f, hudCamera.viewportHeight - 232f);
+            drawTopLeftText(String.format("Ink: %.0f / %.0f", player.getInkAmount(), Player3D.MAX_INK_AMOUNT), 12f, hudCamera.viewportHeight - 100f);
+            drawTopLeftText("Enemy HP: " + enemyCpu.getHp(), 12f, hudCamera.viewportHeight - 122f);
+            drawTopLeftText("Ground: " + getGroundStateLabel(player.getPosition()), 12f, hudCamera.viewportHeight - 144f);
+            drawTopLeftText("Player Splats: " + playerSplatCount, 12f, hudCamera.viewportHeight - 166f);
+            drawTopLeftText("Enemy Splats: " + enemySplatCount, 12f, hudCamera.viewportHeight - 188f);
+            drawTopLeftText("Total: " + floorGrid.getTotalCellCount(), 12f, hudCamera.viewportHeight - 210f);
+            drawTopLeftText(String.format("Player Paint Rate: %.1f%%", floorGrid.getPlayerPaintRatePercent()), 12f, hudCamera.viewportHeight - 232f);
+            drawTopLeftText(String.format("Enemy Paint Rate: %.1f%%", floorGrid.getEnemyPaintRatePercent()), 12f, hudCamera.viewportHeight - 254f);
             drawTopLeftText(String.format("Time: %d", (int) Math.ceil(remainingTime)), hudCamera.viewportWidth - 120f, hudCamera.viewportHeight - 12f);
             drawCenteredText("Paused", hudCamera.viewportHeight / 2f + 24f);
             drawCenteredText(PAUSE_RESUME_TEXT, hudCamera.viewportHeight / 2f - 8f);
@@ -564,6 +566,10 @@ public class Main3D implements ApplicationListener {
 
         // Holding Space should keep firing at the weapon's configured interval.
         while (Gdx.input.isKeyPressed(Input.Keys.SPACE) && fireCooldownRemaining <= 0f) {
+            if (!player.consumeInk(playerWeapon.getInkCost())) {
+                break;
+            }
+
             bullets.add(new Bullet3D(
                 player.getPosition(),
                 cameraMoveForward,

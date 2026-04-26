@@ -10,7 +10,8 @@ public class WeaponConfig3D {
         8f,
         9f,
         0.35f,
-        0.18f
+        0.18f,
+        12f
     );
 
     private final String name;
@@ -18,13 +19,15 @@ public class WeaponConfig3D {
     private final float bulletSpeed;
     private final float paintRadius;
     private final float fireInterval;
+    private final float inkCost;
 
-    public WeaponConfig3D(String name, float range, float bulletSpeed, float paintRadius, float fireInterval) {
+    public WeaponConfig3D(String name, float range, float bulletSpeed, float paintRadius, float fireInterval, float inkCost) {
         this.name = name;
         this.range = range;
         this.bulletSpeed = bulletSpeed;
         this.paintRadius = paintRadius;
         this.fireInterval = fireInterval;
+        this.inkCost = inkCost;
     }
 
     public String getName() {
@@ -45,5 +48,9 @@ public class WeaponConfig3D {
 
     public float getFireInterval() {
         return fireInterval;
+    }
+
+    public float getInkCost() {
+        return inkCost;
     }
 }

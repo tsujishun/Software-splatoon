@@ -22,6 +22,10 @@ public class Player3D implements Disposable {
     public static final float OWN_PAINT_SPEED_MULTIPLIER = 1.15f;
     public static final float ENEMY_PAINT_SPEED_MULTIPLIER = 0.78f;
     public static final float NEUTRAL_SPEED_MULTIPLIER = 1f;
+    public static final float MAX_INK_AMOUNT = 100f;
+    public static final float OWN_PAINT_INK_RECOVERY_PER_SECOND = 28f;
+    public static final float NEUTRAL_INK_RECOVERY_PER_SECOND = 0f;
+    public static final float ENEMY_PAINT_INK_RECOVERY_PER_SECOND = 0f;
     public static final int MAX_HP = 3;
     public static final float HIT_RADIUS = 0.42f;
     public static final float RESPAWN_SECONDS = 2.2f;
@@ -44,6 +48,7 @@ public class Player3D implements Disposable {
     private boolean splatted;
     private float respawnTimer;
     private float invincibleTimer;
+    private float inkAmount;
 
     public Player3D() {
         ModelBuilder modelBuilder = new ModelBuilder();
@@ -84,6 +89,8 @@ public class Player3D implements Disposable {
         position.x = MathUtils.clamp(position.x, floorGrid.getMinX() + halfWidth, floorGrid.getMaxX() - halfWidth);
         position.z = MathUtils.clamp(position.z, floorGrid.getMinZ() + halfDepth, floorGrid.getMaxZ() - halfDepth);
 
+        recoverInk(delta, floorGrid.getCellStateAtWorldPosition(position.x, position.z));
+
         updateTransform();
     }
 
@@ -102,6 +109,7 @@ public class Player3D implements Disposable {
         splatted = false;
         respawnTimer = 0f;
         invincibleTimer = 0f;
+        inkAmount = MAX_INK_AMOUNT;
         updateTransform();
     }
 
@@ -153,6 +161,23 @@ public class Player3D implements Disposable {
         return false;
     }
 
+    public float getInkAmount() {
+        return inkAmount;
+    }
+
+    public boolean hasEnoughInk(float inkCost) {
+        return inkAmount >= inkCost;
+    }
+
+    public boolean consumeInk(float inkCost) {
+        if (!hasEnoughInk(inkCost)) {
+            return false;
+        }
+
+        inkAmount = Math.max(0f, inkAmount - inkCost);
+        return true;
+    }
+
     @Override
     public void dispose() {
         model.dispose();
@@ -178,6 +203,7 @@ public class Player3D implements Disposable {
         hp = MAX_HP;
         splatted = false;
         invincibleTimer = INVINCIBLE_SECONDS;
+        inkAmount = MAX_INK_AMOUNT;
         updateTransform();
     }
 
@@ -196,5 +222,24 @@ public class Player3D implements Disposable {
             return ENEMY_PAINT_SPEED_MULTIPLIER;
         }
         return NEUTRAL_SPEED_MULTIPLIER;
+    }
+
+    private void recoverInk(float delta, int groundCellState) {
+        float recoveryPerSecond = getInkRecoveryPerSecond(groundCellState);
+        if (recoveryPerSecond <= 0f) {
+            return;
+        }
+
+        inkAmount = Math.min(MAX_INK_AMOUNT, inkAmount + recoveryPerSecond * delta);
+    }
+
+    private float getInkRecoveryPerSecond(int groundCellState) {
+        if (groundCellState == FloorGrid3D.CELL_STATE_PLAYER) {
+            return OWN_PAINT_INK_RECOVERY_PER_SECOND;
+        }
+        if (groundCellState == FloorGrid3D.CELL_STATE_ENEMY) {
+            return ENEMY_PAINT_INK_RECOVERY_PER_SECOND;
+        }
+        return NEUTRAL_INK_RECOVERY_PER_SECOND;
     }
 }
