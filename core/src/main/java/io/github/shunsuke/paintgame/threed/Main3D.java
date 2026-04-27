@@ -29,7 +29,7 @@ public class Main3D implements ApplicationListener {
     private static final boolean DEBUG_MODE = false;
     private static final String TITLE_TEXT = "Paint Battle 3D Prototype";
     private static final String TITLE_PROMPT_TEXT = "Press Enter to Start";
-    private static final String STEP_TEXT = "Step 16: Simple Swim Mode";
+    private static final String STEP_TEXT = "Step 17: Simple CPU Battle AI";
     private static final String TITLE_CONTROL_MOVE_TEXT = "WASD: Move";
     private static final String TITLE_CONTROL_LOOK_TEXT = "Mouse: Look";
     private static final String TITLE_CONTROL_SHOOT_TEXT = "Space: Shoot";
@@ -286,7 +286,7 @@ public class Main3D implements ApplicationListener {
                 cameraMoveRight,
                 getSwimInput()
             );
-            enemyCpu.update(delta, floorGrid);
+            enemyCpu.update(delta, floorGrid, player.getPosition(), !player.isSplatted());
             fireCooldownRemaining = Math.max(0f, fireCooldownRemaining - delta);
             enemyFireCooldownRemaining = Math.max(0f, enemyFireCooldownRemaining - delta);
             handlePaintColorToggle();
@@ -339,6 +339,7 @@ public class Main3D implements ApplicationListener {
             drawTopLeftText(String.format("Enemy Paint Rate: %.1f%%", floorGrid.getEnemyPaintRatePercent()), 12f, hudCamera.viewportHeight - 402f);
             if (DEBUG_MODE) {
                 drawTopLeftText("Current Color: " + getCurrentPaintColorLabel(), 12f, hudCamera.viewportHeight - 424f);
+                drawTopLeftText("Enemy AI: " + enemyCpu.getCurrentState(), 12f, hudCamera.viewportHeight - 446f);
             }
             drawTopLeftText(String.format("Time: %d", (int) Math.ceil(remainingTime)), hudCamera.viewportWidth - 120f, hudCamera.viewportHeight - 12f);
             if (player.isSplatted()) {

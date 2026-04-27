@@ -18,6 +18,12 @@ import com.badlogic.gdx.utils.Disposable;
  * It only moves on the floor, turns now and then, and stays away from the edges.
  */
 public class EnemyCpu3D implements Disposable {
+    public enum EnemyState {
+        PAINT,
+        ATTACK,
+        RESPAWN
+    }
+
     public static final float MOVE_SPEED = 2.8f;
     public static final float OWN_PAINT_SPEED_MULTIPLIER = 1.15f;
     public static final float ENEMY_PAINT_SPEED_MULTIPLIER = 0.78f;
@@ -32,6 +38,9 @@ public class EnemyCpu3D implements Disposable {
     private static final float DIRECTION_CHANGE_MIN_SECONDS = 1.2f;
     private static final float DIRECTION_CHANGE_MAX_SECONDS = 2.4f;
     private static final float SPAWN_INSET = 1.3f;
+    private static final float ATTACK_RANGE = 5.2f;
+    private static final float RETREAT_RANGE = 1.9f;
+    private static final float APPROACH_RANGE = 3.4f;
     private static final Color ENEMY_COLOR = new Color(0.95f, 0.45f, 0.7f, 1f);
 
     private final Model model;
@@ -42,12 +51,16 @@ public class EnemyCpu3D implements Disposable {
     private final Vector3 moveDirection = new Vector3(0f, 0f, -1f);
     private final Vector3 nextPosition = new Vector3();
     private final Vector3 centerDirection = new Vector3();
+    private final Vector3 targetDirection = new Vector3();
+    private final Vector3 retreatDirection = new Vector3();
+    private final Vector3 sidestepDirection = new Vector3();
 
     private float directionChangeTimer;
     private int hp;
     private boolean splatted;
     private float respawnTimer;
     private float invincibleTimer;
+    private EnemyState currentState = EnemyState.PAINT;
 
     public EnemyCpu3D() {
         ModelBuilder modelBuilder = new ModelBuilder();
@@ -63,16 +76,14 @@ public class EnemyCpu3D implements Disposable {
         instance = new ModelInstance(model);
     }
 
-    public void update(float delta, FloorGrid3D floorGrid) {
+    public void update(float delta, FloorGrid3D floorGrid, Vector3 playerPosition, boolean playerTargetable) {
         updateTimers(delta, floorGrid);
         if (splatted) {
+            currentState = EnemyState.RESPAWN;
             return;
         }
 
-        directionChangeTimer -= delta;
-        if (directionChangeTimer <= 0f) {
-            chooseRandomDirection();
-        }
+        updateBehavior(delta, playerPosition, playerTargetable);
 
         float speedMultiplier = getGroundSpeedMultiplier(floorGrid.getCellStateAtWorldPosition(position.x, position.z));
         float moveSpeed = MOVE_SPEED * speedMultiplier;
@@ -93,7 +104,9 @@ public class EnemyCpu3D implements Disposable {
             chooseDirectionTowardCenter();
         }
 
-        facingDirection.set(moveDirection).nor();
+        if (currentState == EnemyState.PAINT) {
+            facingDirection.set(moveDirection).nor();
+        }
         updateTransform();
     }
 
@@ -109,6 +122,7 @@ public class EnemyCpu3D implements Disposable {
         splatted = false;
         respawnTimer = 0f;
         invincibleTimer = 0f;
+        currentState = EnemyState.PAINT;
         setSpawnPosition(floorGrid);
         position.set(spawnPosition);
         chooseDirectionTowardCenter();
@@ -138,6 +152,7 @@ public class EnemyCpu3D implements Disposable {
 
         hp = Math.max(0, hp - 1);
         if (hp <= 0) {
+            currentState = EnemyState.RESPAWN;
             splatted = true;
             respawnTimer = RESPAWN_SECONDS;
             return true;
@@ -155,6 +170,10 @@ public class EnemyCpu3D implements Disposable {
 
     public Vector3 getFacingDirection() {
         return facingDirection;
+    }
+
+    public EnemyState getCurrentState() {
+        return currentState;
     }
 
     @Override
@@ -183,8 +202,63 @@ public class EnemyCpu3D implements Disposable {
         hp = MAX_HP;
         splatted = false;
         invincibleTimer = INVINCIBLE_SECONDS;
+        currentState = EnemyState.PAINT;
         chooseDirectionTowardCenter();
         updateTransform();
+    }
+
+    private void updateBehavior(float delta, Vector3 playerPosition, boolean playerTargetable) {
+        if (playerTargetable && isPlayerInsideAttackRange(playerPosition)) {
+            updateAttackBehavior(playerPosition);
+            return;
+        }
+
+        currentState = EnemyState.PAINT;
+        directionChangeTimer -= delta;
+        if (directionChangeTimer <= 0f) {
+            chooseRandomDirection();
+        }
+    }
+
+    private boolean isPlayerInsideAttackRange(Vector3 playerPosition) {
+        float deltaX = playerPosition.x - position.x;
+        float deltaZ = playerPosition.z - position.z;
+        return deltaX * deltaX + deltaZ * deltaZ <= ATTACK_RANGE * ATTACK_RANGE;
+    }
+
+    private void updateAttackBehavior(Vector3 playerPosition) {
+        currentState = EnemyState.ATTACK;
+        targetDirection.set(playerPosition.x - position.x, 0f, playerPosition.z - position.z);
+        if (targetDirection.isZero(0.0001f)) {
+            targetDirection.set(facingDirection);
+        } else {
+            targetDirection.nor();
+        }
+
+        facingDirection.set(targetDirection);
+
+        float deltaX = playerPosition.x - position.x;
+        float deltaZ = playerPosition.z - position.z;
+        float distanceToPlayer = (float) Math.sqrt(deltaX * deltaX + deltaZ * deltaZ);
+
+        if (distanceToPlayer < RETREAT_RANGE) {
+            retreatDirection.set(targetDirection).scl(-1f);
+            moveDirection.set(retreatDirection).nor();
+            return;
+        }
+
+        if (distanceToPlayer > APPROACH_RANGE) {
+            moveDirection.set(targetDirection).nor();
+            return;
+        }
+
+        // In the middle range, drift sideways a little so the enemy still looks alive while aiming.
+        sidestepDirection.set(-targetDirection.z, 0f, targetDirection.x);
+        if (sidestepDirection.isZero(0.0001f)) {
+            moveDirection.set(targetDirection).nor();
+        } else {
+            moveDirection.set(sidestepDirection).nor();
+        }
     }
 
     private void setSpawnPosition(FloorGrid3D floorGrid) {
