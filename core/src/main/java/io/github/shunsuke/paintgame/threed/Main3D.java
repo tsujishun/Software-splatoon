@@ -29,7 +29,7 @@ public class Main3D implements ApplicationListener {
     private static final boolean DEBUG_MODE = false;
     private static final String TITLE_TEXT = "Paint Battle 3D Prototype";
     private static final String TITLE_PROMPT_TEXT = "Press Enter to Start";
-    private static final String STEP_TEXT = "Step 17: Simple CPU Battle AI";
+    private static final String STEP_TEXT = "Step 18: UI and Feedback";
     private static final String TITLE_CONTROL_MOVE_TEXT = "WASD: Move";
     private static final String TITLE_CONTROL_LOOK_TEXT = "Mouse: Look";
     private static final String TITLE_CONTROL_SHOOT_TEXT = "Space: Shoot";
@@ -60,10 +60,27 @@ public class Main3D implements ApplicationListener {
     private static final float CROSSHAIR_CENTER_RADIUS = 2f;
     private static final float CROSSHAIR_SHADOW_OFFSET = 1f;
     private static final float CROSSHAIR_DOT_RADIUS = 1.5f;
+    private static final float STATUS_BAR_WIDTH = 180f;
+    private static final float STATUS_BAR_HEIGHT = 14f;
+    private static final float STATUS_BAR_MARGIN = 16f;
+    private static final float STATUS_PANEL_HEIGHT = 28f;
+    private static final float PLAYER_HIT_FLASH_DURATION = 0.22f;
+    private static final float ENEMY_HIT_FLASH_DURATION = 0.2f;
+    private static final float HIT_MESSAGE_DURATION = 0.65f;
+    private static final float SPLAT_MESSAGE_DURATION = 1.1f;
     private static final Color CROSSHAIR_COLOR = new Color(1f, 1f, 1f, 0.9f);
     private static final Color CROSSHAIR_SHADOW_COLOR = new Color(0f, 0f, 0f, 0.55f);
     private static final Color CROSSHAIR_CENTER_COLOR = new Color(0.16f, 0.8f, 1f, 1f);
     private static final Color CLEAR_COLOR = new Color(0.08f, 0.1f, 0.14f, 1f);
+    private static final Color PANEL_COLOR = new Color(0f, 0f, 0f, 0.4f);
+    private static final Color PANEL_BORDER_COLOR = new Color(1f, 1f, 1f, 0.15f);
+    private static final Color PLAYER_HP_BAR_COLOR = new Color(0.22f, 0.95f, 0.38f, 0.95f);
+    private static final Color INK_BAR_COLOR = new Color(0.15f, 0.8f, 1f, 0.95f);
+    private static final Color ENEMY_HP_BAR_COLOR = new Color(1f, 0.4f, 0.68f, 0.95f);
+    private static final Color BAR_BACKGROUND_COLOR = new Color(0f, 0f, 0f, 0.55f);
+    private static final Color PLAYER_DAMAGE_FLASH_COLOR = new Color(1f, 0.15f, 0.15f, 0.22f);
+    private static final Color FEEDBACK_HIT_COLOR = new Color(1f, 0.92f, 0.35f, 1f);
+    private static final Color FEEDBACK_SPLAT_COLOR = new Color(1f, 0.55f, 0.75f, 1f);
 
     private ModelBatch modelBatch;
     private Environment environment;
@@ -103,6 +120,11 @@ public class Main3D implements ApplicationListener {
     private float finalEnemyPaintRate;
     private int playerSplatCount;
     private int enemySplatCount;
+    private float playerHitFlashTimer;
+    private float enemyHitFlashTimer;
+    private float feedbackMessageTimer;
+    private String feedbackMessageText;
+    private final Color feedbackMessageColor = new Color(Color.WHITE);
 
     @Override
     public void create() {
@@ -133,6 +155,7 @@ public class Main3D implements ApplicationListener {
         resetMatchResult();
         playerSplatCount = 0;
         enemySplatCount = 0;
+        resetCombatFeedback();
         resetCameraAngles();
         setMouseCapture(false);
 
@@ -187,6 +210,7 @@ public class Main3D implements ApplicationListener {
 
         Gdx.gl.glDisable(GL20.GL_DEPTH_TEST);
         hudCamera.update();
+        drawCombatShapes();
         spriteBatch.setProjectionMatrix(hudCamera.combined);
         drawOverlay();
         drawCrosshair();
@@ -294,6 +318,7 @@ public class Main3D implements ApplicationListener {
             handleEnemyShooting();
             updateBullets(delta);
             floorGrid.update(delta);
+            updateCombatFeedback(delta);
         }
     }
 
@@ -317,52 +342,50 @@ public class Main3D implements ApplicationListener {
             drawCenteredText(RETURN_TEXT, hudCamera.viewportHeight / 2f - 48f);
         } else if (flowState == GameFlowState.PLAYING) {
             drawTopLeftText(STEP_TEXT, 12f, hudCamera.viewportHeight - 12f);
-            drawTopLeftText(PLAY_TEXT, 12f, hudCamera.viewportHeight - 34f);
-            drawTopLeftText(CAMERA_CONTROL_TEXT, 12f, hudCamera.viewportHeight - 56f);
-            drawTopLeftText(SHOOT_TEXT, 12f, hudCamera.viewportHeight - 78f);
-            drawTopLeftText(PAUSE_TEXT, 12f, hudCamera.viewportHeight - 100f);
-            drawTopLeftText(RETURN_TEXT, 12f, hudCamera.viewportHeight - 122f);
+            drawTopLeftText(String.format("HP %d / %d", player.getHp(), Player3D.MAX_HP), 24f, hudCamera.viewportHeight - 42f);
+            drawTopLeftText(String.format("Ink %.0f / %.0f", player.getInkAmount(), Player3D.MAX_INK_AMOUNT), 24f, hudCamera.viewportHeight - 68f);
+            drawTopLeftText(String.format("Enemy HP %d / %d", enemyCpu.getHp(), EnemyCpu3D.MAX_HP), hudCamera.viewportWidth - 190f, hudCamera.viewportHeight - 42f);
+            drawCenteredText(String.format("Time %d", (int) Math.ceil(remainingTime)), hudCamera.viewportHeight - 18f);
+            drawTopLeftText("Mode: " + getPlayerModeLabel(), 12f, hudCamera.viewportHeight - 112f);
+            drawTopLeftText("Ground: " + getGroundStateLabel(player.getPosition()), 12f, hudCamera.viewportHeight - 134f);
+            drawTopLeftText(
+                String.format("Player Paint: %d (%.1f%%)", floorGrid.getPlayerPaintedCellCount(), floorGrid.getPlayerPaintRatePercent()),
+                12f,
+                hudCamera.viewportHeight - 156f
+            );
+            drawTopLeftText(
+                String.format("Enemy Paint: %d (%.1f%%)", floorGrid.getEnemyPaintedCellCount(), floorGrid.getEnemyPaintRatePercent()),
+                12f,
+                hudCamera.viewportHeight - 178f
+            );
+            drawTopLeftText(String.format("Splats P / E: %d / %d", playerSplatCount, enemySplatCount), 12f, hudCamera.viewportHeight - 200f);
+            drawTopLeftText("Shift: Swim on your paint", 12f, hudCamera.viewportHeight - 222f);
+            drawTopLeftText("Esc: Pause   R: Title", 12f, hudCamera.viewportHeight - 244f);
             if (DEBUG_MODE) {
-                drawTopLeftText(DEBUG_PAINT_TEXT, 12f, hudCamera.viewportHeight - 144f);
+                drawTopLeftText(DEBUG_PAINT_TEXT, 12f, hudCamera.viewportHeight - 266f);
+                drawTopLeftText("Current Color: " + getCurrentPaintColorLabel(), 12f, hudCamera.viewportHeight - 288f);
+                drawTopLeftText("Enemy AI: " + enemyCpu.getCurrentState(), 12f, hudCamera.viewportHeight - 310f);
             }
-            drawTopLeftText("Player: " + floorGrid.getPlayerPaintedCellCount(), 12f, hudCamera.viewportHeight - 160f);
-            drawTopLeftText("Enemy: " + floorGrid.getEnemyPaintedCellCount(), 12f, hudCamera.viewportHeight - 182f);
-            drawTopLeftText("Player HP: " + player.getHp(), 12f, hudCamera.viewportHeight - 204f);
-            drawTopLeftText(String.format("Ink: %.0f / %.0f", player.getInkAmount(), Player3D.MAX_INK_AMOUNT), 12f, hudCamera.viewportHeight - 226f);
-            drawTopLeftText("Enemy HP: " + enemyCpu.getHp(), 12f, hudCamera.viewportHeight - 248f);
-            drawTopLeftText("Mode: " + getPlayerModeLabel(), 12f, hudCamera.viewportHeight - 270f);
-            drawTopLeftText("Ground: " + getGroundStateLabel(player.getPosition()), 12f, hudCamera.viewportHeight - 292f);
-            drawTopLeftText("Player Splats: " + playerSplatCount, 12f, hudCamera.viewportHeight - 314f);
-            drawTopLeftText("Enemy Splats: " + enemySplatCount, 12f, hudCamera.viewportHeight - 336f);
-            drawTopLeftText("Total: " + floorGrid.getTotalCellCount(), 12f, hudCamera.viewportHeight - 358f);
-            drawTopLeftText(String.format("Player Paint Rate: %.1f%%", floorGrid.getPlayerPaintRatePercent()), 12f, hudCamera.viewportHeight - 380f);
-            drawTopLeftText(String.format("Enemy Paint Rate: %.1f%%", floorGrid.getEnemyPaintRatePercent()), 12f, hudCamera.viewportHeight - 402f);
-            if (DEBUG_MODE) {
-                drawTopLeftText("Current Color: " + getCurrentPaintColorLabel(), 12f, hudCamera.viewportHeight - 424f);
-                drawTopLeftText("Enemy AI: " + enemyCpu.getCurrentState(), 12f, hudCamera.viewportHeight - 446f);
+
+            if (feedbackMessageTimer > 0f && feedbackMessageText != null && !feedbackMessageText.isEmpty()) {
+                drawCenteredTextWithShadow(feedbackMessageText, hudCamera.viewportHeight / 2f + 76f, feedbackMessageColor);
             }
-            drawTopLeftText(String.format("Time: %d", (int) Math.ceil(remainingTime)), hudCamera.viewportWidth - 120f, hudCamera.viewportHeight - 12f);
             if (player.isSplatted()) {
-                drawCenteredText("Splatted!", hudCamera.viewportHeight / 2f + 20f);
-                drawCenteredText(
+                drawCenteredTextWithShadow("Splatted!", hudCamera.viewportHeight / 2f + 26f, FEEDBACK_SPLAT_COLOR);
+                drawCenteredTextWithShadow(
                     String.format("Respawning... %.1f", player.getRespawnTimer()),
-                    hudCamera.viewportHeight / 2f - 12f
+                    hudCamera.viewportHeight / 2f - 10f,
+                    Color.WHITE
                 );
             }
         } else if (flowState == GameFlowState.PAUSED) {
             drawTopLeftText(STEP_TEXT, 12f, hudCamera.viewportHeight - 12f);
-            drawTopLeftText("Player: " + floorGrid.getPlayerPaintedCellCount(), 12f, hudCamera.viewportHeight - 34f);
-            drawTopLeftText("Enemy: " + floorGrid.getEnemyPaintedCellCount(), 12f, hudCamera.viewportHeight - 56f);
-            drawTopLeftText("Player HP: " + player.getHp(), 12f, hudCamera.viewportHeight - 78f);
-            drawTopLeftText(String.format("Ink: %.0f / %.0f", player.getInkAmount(), Player3D.MAX_INK_AMOUNT), 12f, hudCamera.viewportHeight - 100f);
-            drawTopLeftText("Enemy HP: " + enemyCpu.getHp(), 12f, hudCamera.viewportHeight - 122f);
-            drawTopLeftText("Mode: " + getPlayerModeLabel(), 12f, hudCamera.viewportHeight - 144f);
-            drawTopLeftText("Ground: " + getGroundStateLabel(player.getPosition()), 12f, hudCamera.viewportHeight - 166f);
-            drawTopLeftText("Player Splats: " + playerSplatCount, 12f, hudCamera.viewportHeight - 188f);
-            drawTopLeftText("Enemy Splats: " + enemySplatCount, 12f, hudCamera.viewportHeight - 210f);
-            drawTopLeftText("Total: " + floorGrid.getTotalCellCount(), 12f, hudCamera.viewportHeight - 232f);
-            drawTopLeftText(String.format("Player Paint Rate: %.1f%%", floorGrid.getPlayerPaintRatePercent()), 12f, hudCamera.viewportHeight - 254f);
-            drawTopLeftText(String.format("Enemy Paint Rate: %.1f%%", floorGrid.getEnemyPaintRatePercent()), 12f, hudCamera.viewportHeight - 276f);
+            drawTopLeftText(String.format("Player Paint: %d (%.1f%%)", floorGrid.getPlayerPaintedCellCount(), floorGrid.getPlayerPaintRatePercent()), 12f, hudCamera.viewportHeight - 40f);
+            drawTopLeftText(String.format("Enemy Paint: %d (%.1f%%)", floorGrid.getEnemyPaintedCellCount(), floorGrid.getEnemyPaintRatePercent()), 12f, hudCamera.viewportHeight - 62f);
+            drawTopLeftText(String.format("Player HP: %d / %d", player.getHp(), Player3D.MAX_HP), 12f, hudCamera.viewportHeight - 84f);
+            drawTopLeftText(String.format("Ink: %.0f / %.0f", player.getInkAmount(), Player3D.MAX_INK_AMOUNT), 12f, hudCamera.viewportHeight - 106f);
+            drawTopLeftText(String.format("Enemy HP: %d / %d", enemyCpu.getHp(), EnemyCpu3D.MAX_HP), 12f, hudCamera.viewportHeight - 128f);
+            drawTopLeftText(String.format("Splats P / E: %d / %d", playerSplatCount, enemySplatCount), 12f, hudCamera.viewportHeight - 150f);
             drawTopLeftText(String.format("Time: %d", (int) Math.ceil(remainingTime)), hudCamera.viewportWidth - 120f, hudCamera.viewportHeight - 12f);
             drawCenteredText("Paused", hudCamera.viewportHeight / 2f + 24f);
             drawCenteredText(PAUSE_RESUME_TEXT, hudCamera.viewportHeight / 2f - 8f);
@@ -401,6 +424,91 @@ public class Main3D implements ApplicationListener {
 
     private void drawTopLeftText(String text, float x, float y) {
         font.draw(spriteBatch, text, x, y);
+    }
+
+    private void drawCenteredTextWithShadow(String text, float y, Color color) {
+        glyphLayout.setText(font, text);
+        float x = (hudCamera.viewportWidth - glyphLayout.width) / 2f;
+        float oldR = font.getColor().r;
+        float oldG = font.getColor().g;
+        float oldB = font.getColor().b;
+        float oldA = font.getColor().a;
+
+        font.setColor(0f, 0f, 0f, 0.75f);
+        font.draw(spriteBatch, glyphLayout, x + 2f, y - 2f);
+        font.setColor(color);
+        font.draw(spriteBatch, glyphLayout, x, y);
+        font.setColor(oldR, oldG, oldB, oldA);
+    }
+
+    private void drawCombatShapes() {
+        if (flowState != GameFlowState.PLAYING) {
+            return;
+        }
+
+        float playerHpX = STATUS_BAR_MARGIN;
+        float playerHpY = hudCamera.viewportHeight - 48f;
+        float inkX = STATUS_BAR_MARGIN;
+        float inkY = hudCamera.viewportHeight - 74f;
+        float enemyHpX = hudCamera.viewportWidth - STATUS_BAR_MARGIN - STATUS_BAR_WIDTH;
+        float enemyHpY = hudCamera.viewportHeight - 48f;
+        float timePanelWidth = 110f;
+        float timePanelX = (hudCamera.viewportWidth - timePanelWidth) / 2f;
+        float timePanelY = hudCamera.viewportHeight - 44f;
+
+        shapeRenderer.setProjectionMatrix(hudCamera.combined);
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+
+        if (playerHitFlashTimer > 0f) {
+            float flashAlpha = (playerHitFlashTimer / PLAYER_HIT_FLASH_DURATION) * PLAYER_DAMAGE_FLASH_COLOR.a;
+            shapeRenderer.setColor(PLAYER_DAMAGE_FLASH_COLOR.r, PLAYER_DAMAGE_FLASH_COLOR.g, PLAYER_DAMAGE_FLASH_COLOR.b, flashAlpha);
+            shapeRenderer.rect(0f, 0f, hudCamera.viewportWidth, hudCamera.viewportHeight);
+        }
+
+        shapeRenderer.setColor(PANEL_COLOR);
+        shapeRenderer.rect(playerHpX - 8f, playerHpY - 6f, STATUS_BAR_WIDTH + 16f, STATUS_PANEL_HEIGHT);
+        shapeRenderer.rect(inkX - 8f, inkY - 6f, STATUS_BAR_WIDTH + 16f, STATUS_PANEL_HEIGHT);
+        shapeRenderer.rect(enemyHpX - 8f, enemyHpY - 6f, STATUS_BAR_WIDTH + 16f, STATUS_PANEL_HEIGHT);
+        shapeRenderer.rect(timePanelX, timePanelY, timePanelWidth, STATUS_PANEL_HEIGHT);
+
+        if (feedbackMessageTimer > 0f && feedbackMessageText != null && !feedbackMessageText.isEmpty()) {
+            shapeRenderer.rect(hudCamera.viewportWidth / 2f - 112f, hudCamera.viewportHeight / 2f + 52f, 224f, 34f);
+        }
+        if (player.isSplatted()) {
+            shapeRenderer.rect(hudCamera.viewportWidth / 2f - 140f, hudCamera.viewportHeight / 2f - 32f, 280f, 88f);
+        }
+
+        drawBarFill(playerHpX, playerHpY, STATUS_BAR_WIDTH, STATUS_BAR_HEIGHT, player.getHp() / (float) Player3D.MAX_HP, PLAYER_HP_BAR_COLOR);
+        drawBarFill(inkX, inkY, STATUS_BAR_WIDTH, STATUS_BAR_HEIGHT, player.getInkAmount() / Player3D.MAX_INK_AMOUNT, INK_BAR_COLOR);
+
+        Color enemyBarColor = new Color(ENEMY_HP_BAR_COLOR);
+        if (enemyHitFlashTimer > 0f) {
+            enemyBarColor.lerp(Color.WHITE, Math.min(1f, enemyHitFlashTimer / ENEMY_HIT_FLASH_DURATION));
+        }
+        drawBarFill(enemyHpX, enemyHpY, STATUS_BAR_WIDTH, STATUS_BAR_HEIGHT, enemyCpu.getHp() / (float) EnemyCpu3D.MAX_HP, enemyBarColor);
+        shapeRenderer.end();
+
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
+        shapeRenderer.setColor(PANEL_BORDER_COLOR);
+        shapeRenderer.rect(playerHpX - 8f, playerHpY - 6f, STATUS_BAR_WIDTH + 16f, STATUS_PANEL_HEIGHT);
+        shapeRenderer.rect(inkX - 8f, inkY - 6f, STATUS_BAR_WIDTH + 16f, STATUS_PANEL_HEIGHT);
+        shapeRenderer.rect(enemyHpX - 8f, enemyHpY - 6f, STATUS_BAR_WIDTH + 16f, STATUS_PANEL_HEIGHT);
+        shapeRenderer.rect(timePanelX, timePanelY, timePanelWidth, STATUS_PANEL_HEIGHT);
+        if (feedbackMessageTimer > 0f && feedbackMessageText != null && !feedbackMessageText.isEmpty()) {
+            shapeRenderer.rect(hudCamera.viewportWidth / 2f - 112f, hudCamera.viewportHeight / 2f + 52f, 224f, 34f);
+        }
+        if (player.isSplatted()) {
+            shapeRenderer.rect(hudCamera.viewportWidth / 2f - 140f, hudCamera.viewportHeight / 2f - 32f, 280f, 88f);
+        }
+        shapeRenderer.end();
+    }
+
+    private void drawBarFill(float x, float y, float width, float height, float ratio, Color fillColor) {
+        float clampedRatio = MathUtils.clamp(ratio, 0f, 1f);
+        shapeRenderer.setColor(BAR_BACKGROUND_COLOR);
+        shapeRenderer.rect(x, y, width, height);
+        shapeRenderer.setColor(fillColor);
+        shapeRenderer.rect(x, y, width * clampedRatio, height);
     }
 
     private void drawCrosshair() {
@@ -470,6 +578,7 @@ public class Main3D implements ApplicationListener {
         resetMatchResult();
         playerSplatCount = 0;
         enemySplatCount = 0;
+        resetCombatFeedback();
         resetCameraAngles();
         setMouseCapture(false);
         snapCameraToPlayer();
@@ -489,6 +598,7 @@ public class Main3D implements ApplicationListener {
         resetMatchResult();
         playerSplatCount = 0;
         enemySplatCount = 0;
+        resetCombatFeedback();
         resetCameraAngles();
         setMouseCapture(false);
         snapCameraToPlayer();
@@ -517,6 +627,7 @@ public class Main3D implements ApplicationListener {
         player.setSwimming(false);
         flowState = GameFlowState.GAME_OVER;
         clearBullets();
+        resetCombatFeedback();
         setMouseCapture(false);
     }
 
@@ -635,8 +746,12 @@ public class Main3D implements ApplicationListener {
             if (!enemyCpu.isSplatted()
                 && !enemyCpu.isInvincible()
                 && isHitOnFloorPlane(bullet.getPosition(), enemyCpu.getPosition(), enemyCpu.getHitRadius())) {
+                enemyHitFlashTimer = ENEMY_HIT_FLASH_DURATION;
                 if (enemyCpu.takeHit()) {
                     playerSplatCount++;
+                    showFeedbackMessage("Enemy Splatted!", FEEDBACK_SPLAT_COLOR, SPLAT_MESSAGE_DURATION);
+                } else {
+                    showFeedbackMessage("Hit!", FEEDBACK_HIT_COLOR, HIT_MESSAGE_DURATION);
                 }
                 return true;
             }
@@ -647,6 +762,7 @@ public class Main3D implements ApplicationListener {
             if (!player.isSplatted()
                 && !player.isInvincible()
                 && isHitOnFloorPlane(bullet.getPosition(), player.getPosition(), player.getHitRadius())) {
+                playerHitFlashTimer = PLAYER_HIT_FLASH_DURATION;
                 if (player.takeHit()) {
                     enemySplatCount++;
                 }
@@ -673,6 +789,29 @@ public class Main3D implements ApplicationListener {
         float deltaX = bulletPosition.x - targetPosition.x;
         float deltaZ = bulletPosition.z - targetPosition.z;
         return deltaX * deltaX + deltaZ * deltaZ <= hitRadius * hitRadius;
+    }
+
+    private void updateCombatFeedback(float delta) {
+        playerHitFlashTimer = Math.max(0f, playerHitFlashTimer - delta);
+        enemyHitFlashTimer = Math.max(0f, enemyHitFlashTimer - delta);
+        feedbackMessageTimer = Math.max(0f, feedbackMessageTimer - delta);
+        if (feedbackMessageTimer <= 0f) {
+            feedbackMessageText = "";
+        }
+    }
+
+    private void resetCombatFeedback() {
+        playerHitFlashTimer = 0f;
+        enemyHitFlashTimer = 0f;
+        feedbackMessageTimer = 0f;
+        feedbackMessageText = "";
+        feedbackMessageColor.set(Color.WHITE);
+    }
+
+    private void showFeedbackMessage(String text, Color color, float duration) {
+        feedbackMessageText = text;
+        feedbackMessageColor.set(color);
+        feedbackMessageTimer = duration;
     }
 
     private void updateCameraMovementBasis() {
