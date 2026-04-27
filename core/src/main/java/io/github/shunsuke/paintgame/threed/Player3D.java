@@ -24,8 +24,10 @@ public class Player3D implements Disposable {
     public static final float NEUTRAL_SPEED_MULTIPLIER = 1f;
     public static final float MAX_INK_AMOUNT = 100f;
     public static final float OWN_PAINT_INK_RECOVERY_PER_SECOND = 28f;
+    public static final float SWIM_OWN_PAINT_INK_RECOVERY_PER_SECOND = 54f;
     public static final float NEUTRAL_INK_RECOVERY_PER_SECOND = 0f;
     public static final float ENEMY_PAINT_INK_RECOVERY_PER_SECOND = 0f;
+    public static final float SWIM_SPEED_MULTIPLIER = 1.4f;
     public static final int MAX_HP = 3;
     public static final float HIT_RADIUS = 0.42f;
     public static final float RESPAWN_SECONDS = 2.2f;
@@ -35,6 +37,10 @@ public class Player3D implements Disposable {
     private static final float PLAYER_HEIGHT = 0.9f;
     private static final float PLAYER_DEPTH = 0.78f;
     private static final Color PLAYER_COLOR = new Color(0.25f, 0.7f, 0.95f, 1f);
+    private static final Color SWIM_COLOR = new Color(0.1f, 0.48f, 0.75f, 1f);
+    private static final float SWIM_HEIGHT_SCALE = 0.35f;
+    private static final float SWIM_WIDTH_SCALE = 0.92f;
+    private static final float SWIM_DEPTH_SCALE = 0.92f;
 
     private final Model model;
     private final ModelInstance instance;
@@ -49,6 +55,7 @@ public class Player3D implements Disposable {
     private float respawnTimer;
     private float invincibleTimer;
     private float inkAmount;
+    private boolean swimming;
 
     public Player3D() {
         ModelBuilder modelBuilder = new ModelBuilder();
@@ -63,11 +70,22 @@ public class Player3D implements Disposable {
         reset();
     }
 
-    public void update(float delta, FloorGrid3D floorGrid, float moveForward, float moveSide, Vector3 cameraForward, Vector3 cameraRight) {
+    public void update(
+        float delta,
+        FloorGrid3D floorGrid,
+        float moveForward,
+        float moveSide,
+        Vector3 cameraForward,
+        Vector3 cameraRight,
+        boolean swimInput
+    ) {
         updateTimers(delta);
         if (splatted) {
             return;
         }
+
+        int currentGroundState = floorGrid.getCellStateAtWorldPosition(position.x, position.z);
+        updateSwimmingState(swimInput, currentGroundState);
 
         if (moveForward != 0f || moveSide != 0f) {
             // Convert keyboard input into a direction based on the camera's horizontal view.
@@ -77,6 +95,9 @@ public class Player3D implements Disposable {
 
             // Moving on your own paint should feel better, while enemy paint should slow you down.
             float speedMultiplier = getGroundSpeedMultiplier(floorGrid.getCellStateAtWorldPosition(position.x, position.z));
+            if (swimming) {
+                speedMultiplier *= SWIM_SPEED_MULTIPLIER;
+            }
             float moveSpeed = MOVE_SPEED * speedMultiplier;
 
             position.x += moveDirection.x * moveSpeed * delta;
@@ -89,7 +110,9 @@ public class Player3D implements Disposable {
         position.x = MathUtils.clamp(position.x, floorGrid.getMinX() + halfWidth, floorGrid.getMaxX() - halfWidth);
         position.z = MathUtils.clamp(position.z, floorGrid.getMinZ() + halfDepth, floorGrid.getMaxZ() - halfDepth);
 
-        recoverInk(delta, floorGrid.getCellStateAtWorldPosition(position.x, position.z));
+        int groundStateAfterMove = floorGrid.getCellStateAtWorldPosition(position.x, position.z);
+        updateSwimmingState(swimInput, groundStateAfterMove);
+        recoverInk(delta, groundStateAfterMove);
 
         updateTransform();
     }
@@ -110,6 +133,7 @@ public class Player3D implements Disposable {
         respawnTimer = 0f;
         invincibleTimer = 0f;
         inkAmount = MAX_INK_AMOUNT;
+        swimming = false;
         updateTransform();
     }
 
@@ -154,6 +178,7 @@ public class Player3D implements Disposable {
 
         hp = Math.max(0, hp - 1);
         if (hp <= 0) {
+            swimming = false;
             splatted = true;
             respawnTimer = RESPAWN_SECONDS;
             return true;
@@ -176,6 +201,19 @@ public class Player3D implements Disposable {
 
         inkAmount = Math.max(0f, inkAmount - inkCost);
         return true;
+    }
+
+    public boolean isSwimming() {
+        return swimming;
+    }
+
+    public void setSwimming(boolean swimming) {
+        if (this.swimming == swimming) {
+            return;
+        }
+
+        this.swimming = swimming;
+        updateTransform();
     }
 
     @Override
@@ -204,14 +242,21 @@ public class Player3D implements Disposable {
         splatted = false;
         invincibleTimer = INVINCIBLE_SECONDS;
         inkAmount = MAX_INK_AMOUNT;
+        swimming = false;
         updateTransform();
     }
 
     private void updateTransform() {
         float facingAngleDegrees = MathUtils.atan2(facingDirection.x, -facingDirection.z) * MathUtils.radiansToDegrees;
+        float heightScale = swimming ? SWIM_HEIGHT_SCALE : 1f;
+        float widthScale = swimming ? SWIM_WIDTH_SCALE : 1f;
+        float depthScale = swimming ? SWIM_DEPTH_SCALE : 1f;
+        float visualY = position.y - PLAYER_HEIGHT * (1f - heightScale) * 0.32f;
         instance.transform.idt();
-        instance.transform.translate(position);
+        instance.transform.translate(position.x, visualY, position.z);
         instance.transform.rotate(Vector3.Y, facingAngleDegrees);
+        instance.transform.scale(widthScale, heightScale, depthScale);
+        instance.materials.get(0).set(ColorAttribute.createDiffuse(swimming ? SWIM_COLOR : PLAYER_COLOR));
     }
 
     private float getGroundSpeedMultiplier(int groundCellState) {
@@ -234,6 +279,9 @@ public class Player3D implements Disposable {
     }
 
     private float getInkRecoveryPerSecond(int groundCellState) {
+        if (swimming && groundCellState == FloorGrid3D.CELL_STATE_PLAYER) {
+            return SWIM_OWN_PAINT_INK_RECOVERY_PER_SECOND;
+        }
         if (groundCellState == FloorGrid3D.CELL_STATE_PLAYER) {
             return OWN_PAINT_INK_RECOVERY_PER_SECOND;
         }
@@ -241,5 +289,12 @@ public class Player3D implements Disposable {
             return ENEMY_PAINT_INK_RECOVERY_PER_SECOND;
         }
         return NEUTRAL_INK_RECOVERY_PER_SECOND;
+    }
+
+    private void updateSwimmingState(boolean swimInput, int groundCellState) {
+        boolean canSwim = swimInput && groundCellState == FloorGrid3D.CELL_STATE_PLAYER;
+        if (swimming != canSwim) {
+            setSwimming(canSwim);
+        }
     }
 }
