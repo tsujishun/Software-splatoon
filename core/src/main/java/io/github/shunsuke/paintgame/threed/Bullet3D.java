@@ -40,6 +40,7 @@ public class Bullet3D implements Disposable {
     private final WeaponConfig3D weaponConfig;
     private final int ownerType;
     private final int paintCellState;
+    private final float collisionRadius;
 
     private float traveledDistance;
 
@@ -65,6 +66,7 @@ public class Bullet3D implements Disposable {
         this.weaponConfig = weaponConfig;
         this.ownerType = ownerType;
         this.paintCellState = paintCellState;
+        this.collisionRadius = Math.max(bulletWidth, bulletDepth) / 2f;
 
         // Only use the horizontal part of the aim so the bullet stays on the floor plane for now.
         direction.set(facingDirection.x, 0f, facingDirection.z);
@@ -81,17 +83,26 @@ public class Bullet3D implements Disposable {
         updateTransform();
     }
 
-    public boolean update(float delta, FloorGrid3D floorGrid) {
+    public boolean update(float delta, FloorGrid3D floorGrid, StageObstacles3D stageObstacles) {
         float moveDistance = weaponConfig.getBulletSpeed() * delta;
         float paintStepDistance = Math.max(0.05f, weaponConfig.getPaintRadius() * 0.5f);
         int stepCount = Math.max(1, (int) Math.ceil(moveDistance / paintStepDistance));
         float stepDistance = moveDistance / stepCount;
         boolean isInsideFloor = true;
+        boolean hitObstacle = false;
 
         paintCurrentTile(floorGrid);
 
         for (int step = 0; step < stepCount; step++) {
-            position.mulAdd(direction, stepDistance);
+            float nextX = position.x + direction.x * stepDistance;
+            float nextZ = position.z + direction.z * stepDistance;
+
+            if (stageObstacles.collidesCircle(nextX, nextZ, collisionRadius)) {
+                hitObstacle = true;
+                break;
+            }
+
+            position.set(nextX, position.y, nextZ);
             traveledDistance += stepDistance;
 
             if (!isInsideFloorBounds(floorGrid)) {
@@ -104,7 +115,7 @@ public class Bullet3D implements Disposable {
 
         updateTransform();
 
-        return traveledDistance < weaponConfig.getRange() && isInsideFloor;
+        return traveledDistance < weaponConfig.getRange() && isInsideFloor && !hitObstacle;
     }
 
     public void render(ModelBatch modelBatch, Environment environment) {

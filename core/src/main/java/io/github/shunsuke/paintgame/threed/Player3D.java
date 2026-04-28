@@ -36,6 +36,7 @@ public class Player3D implements Disposable {
     private static final float PLAYER_WIDTH = 0.52f;
     private static final float PLAYER_HEIGHT = 0.9f;
     private static final float PLAYER_DEPTH = 0.78f;
+    private static final float COLLISION_RADIUS = 0.34f;
     private static final Color PLAYER_COLOR = new Color(0.25f, 0.7f, 0.95f, 1f);
     private static final Color SWIM_COLOR = new Color(0.1f, 0.48f, 0.75f, 1f);
     private static final float SWIM_HEIGHT_SCALE = 0.35f;
@@ -77,7 +78,8 @@ public class Player3D implements Disposable {
         float moveSide,
         Vector3 cameraForward,
         Vector3 cameraRight,
-        boolean swimInput
+        boolean swimInput,
+        StageObstacles3D stageObstacles
     ) {
         updateTimers(delta);
         if (splatted) {
@@ -99,9 +101,7 @@ public class Player3D implements Disposable {
                 speedMultiplier *= SWIM_SPEED_MULTIPLIER;
             }
             float moveSpeed = MOVE_SPEED * speedMultiplier;
-
-            position.x += moveDirection.x * moveSpeed * delta;
-            position.z += moveDirection.z * moveSpeed * delta;
+            moveWithObstacleCollision(moveSpeed * delta, floorGrid, stageObstacles);
         }
 
         // Keep the player inside the floor so the early 3D prototype is easy to control.
@@ -257,6 +257,26 @@ public class Player3D implements Disposable {
         instance.transform.rotate(Vector3.Y, facingAngleDegrees);
         instance.transform.scale(widthScale, heightScale, depthScale);
         instance.materials.get(0).set(ColorAttribute.createDiffuse(swimming ? SWIM_COLOR : PLAYER_COLOR));
+    }
+
+    private void moveWithObstacleCollision(float moveDistance, FloorGrid3D floorGrid, StageObstacles3D stageObstacles) {
+        float candidateX = MathUtils.clamp(
+            position.x + moveDirection.x * moveDistance,
+            floorGrid.getMinX() + PLAYER_WIDTH / 2f,
+            floorGrid.getMaxX() - PLAYER_WIDTH / 2f
+        );
+        if (!stageObstacles.collidesCircle(candidateX, position.z, COLLISION_RADIUS)) {
+            position.x = candidateX;
+        }
+
+        float candidateZ = MathUtils.clamp(
+            position.z + moveDirection.z * moveDistance,
+            floorGrid.getMinZ() + PLAYER_DEPTH / 2f,
+            floorGrid.getMaxZ() - PLAYER_DEPTH / 2f
+        );
+        if (!stageObstacles.collidesCircle(position.x, candidateZ, COLLISION_RADIUS)) {
+            position.z = candidateZ;
+        }
     }
 
     private float getGroundSpeedMultiplier(int groundCellState) {

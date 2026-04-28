@@ -29,7 +29,7 @@ public class Main3D implements ApplicationListener {
     private static final boolean DEBUG_MODE = false;
     private static final String TITLE_TEXT = "Paint Battle 3D Prototype";
     private static final String TITLE_PROMPT_TEXT = "Press Enter to Start";
-    private static final String STEP_TEXT = "Step 18: UI and Feedback";
+    private static final String STEP_TEXT = "Step 19: Obstacles and Walls";
     private static final String TITLE_CONTROL_MOVE_TEXT = "WASD: Move";
     private static final String TITLE_CONTROL_LOOK_TEXT = "Mouse: Look";
     private static final String TITLE_CONTROL_SHOOT_TEXT = "Space: Shoot";
@@ -91,6 +91,7 @@ public class Main3D implements ApplicationListener {
     private BitmapFont font;
     private GlyphLayout glyphLayout;
     private FloorGrid3D floorGrid;
+    private StageObstacles3D stageObstacles;
     private Player3D player;
     private EnemyCpu3D enemyCpu;
     private final ArrayList<Bullet3D> bullets = new ArrayList<>();
@@ -140,6 +141,7 @@ public class Main3D implements ApplicationListener {
         environment.add(new DirectionalLight().set(0.7f, 0.7f, 0.75f, -1f, -0.8f, -0.3f));
 
         floorGrid = new FloorGrid3D(12, 12);
+        stageObstacles = new StageObstacles3D();
         player = new Player3D();
         enemyCpu = new EnemyCpu3D();
         enemyCpu.reset(floorGrid);
@@ -201,6 +203,7 @@ public class Main3D implements ApplicationListener {
         worldCamera.update();
         modelBatch.begin(worldCamera);
         floorGrid.render(modelBatch, environment);
+        stageObstacles.render(modelBatch, environment);
         renderBullets();
         if (flowState != GameFlowState.TITLE) {
             player.render(modelBatch, environment);
@@ -242,6 +245,9 @@ public class Main3D implements ApplicationListener {
         }
         if (floorGrid != null) {
             floorGrid.dispose();
+        }
+        if (stageObstacles != null) {
+            stageObstacles.dispose();
         }
         if (player != null) {
             player.dispose();
@@ -308,9 +314,10 @@ public class Main3D implements ApplicationListener {
                 getMoveSideInput(),
                 cameraMoveForward,
                 cameraMoveRight,
-                getSwimInput()
+                getSwimInput(),
+                stageObstacles
             );
-            enemyCpu.update(delta, floorGrid, player.getPosition(), !player.isSplatted());
+            enemyCpu.update(delta, floorGrid, player.getPosition(), !player.isSplatted(), stageObstacles);
             fireCooldownRemaining = Math.max(0f, fireCooldownRemaining - delta);
             enemyFireCooldownRemaining = Math.max(0f, enemyFireCooldownRemaining - delta);
             handlePaintColorToggle();
@@ -732,7 +739,7 @@ public class Main3D implements ApplicationListener {
         Iterator<Bullet3D> iterator = bullets.iterator();
         while (iterator.hasNext()) {
             Bullet3D bullet = iterator.next();
-            boolean isStillActive = bullet.update(delta, floorGrid);
+            boolean isStillActive = bullet.update(delta, floorGrid, stageObstacles);
             boolean hitCharacter = handleBulletCharacterHit(bullet);
             if (!isStillActive || hitCharacter) {
                 bullet.dispose();

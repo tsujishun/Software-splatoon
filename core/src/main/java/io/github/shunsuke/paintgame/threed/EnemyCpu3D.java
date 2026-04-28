@@ -76,7 +76,13 @@ public class EnemyCpu3D implements Disposable {
         instance = new ModelInstance(model);
     }
 
-    public void update(float delta, FloorGrid3D floorGrid, Vector3 playerPosition, boolean playerTargetable) {
+    public void update(
+        float delta,
+        FloorGrid3D floorGrid,
+        Vector3 playerPosition,
+        boolean playerTargetable,
+        StageObstacles3D stageObstacles
+    ) {
         updateTimers(delta, floorGrid);
         if (splatted) {
             currentState = EnemyState.RESPAWN;
@@ -95,12 +101,10 @@ public class EnemyCpu3D implements Disposable {
         float minZ = floorGrid.getMinZ() + radius;
         float maxZ = floorGrid.getMaxZ() - radius;
         boolean hitWall = nextPosition.x < minX || nextPosition.x > maxX || nextPosition.z < minZ || nextPosition.z > maxZ;
-
-        position.x = MathUtils.clamp(nextPosition.x, minX, maxX);
-        position.z = MathUtils.clamp(nextPosition.z, minZ, maxZ);
+        boolean hitObstacle = moveWithObstacleCollision(stageObstacles, minX, maxX, minZ, maxZ, radius);
 
         // If the enemy reaches an edge, point it back toward the middle so it keeps moving around the arena.
-        if (hitWall || isNearFloorEdge(floorGrid, radius)) {
+        if (hitWall || hitObstacle || isNearFloorEdge(floorGrid, radius)) {
             chooseDirectionTowardCenter();
         }
 
@@ -305,6 +309,33 @@ public class EnemyCpu3D implements Disposable {
 
     private void updateTransform() {
         instance.transform.setToTranslation(position);
+    }
+
+    private boolean moveWithObstacleCollision(
+        StageObstacles3D stageObstacles,
+        float minX,
+        float maxX,
+        float minZ,
+        float maxZ,
+        float radius
+    ) {
+        boolean hitObstacle = false;
+
+        float candidateX = MathUtils.clamp(nextPosition.x, minX, maxX);
+        if (!stageObstacles.collidesCircle(candidateX, position.z, radius)) {
+            position.x = candidateX;
+        } else {
+            hitObstacle = true;
+        }
+
+        float candidateZ = MathUtils.clamp(nextPosition.z, minZ, maxZ);
+        if (!stageObstacles.collidesCircle(position.x, candidateZ, radius)) {
+            position.z = candidateZ;
+        } else {
+            hitObstacle = true;
+        }
+
+        return hitObstacle;
     }
 
     private float getGroundSpeedMultiplier(int groundCellState) {
