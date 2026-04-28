@@ -29,7 +29,7 @@ public class Main3D implements ApplicationListener {
     private static final boolean DEBUG_MODE = false;
     private static final String TITLE_TEXT = "Paint Battle 3D Prototype";
     private static final String TITLE_PROMPT_TEXT = "Press Enter to Start";
-    private static final String STEP_TEXT = "Step 20: Jump and Gravity";
+    private static final String STEP_TEXT = "Step 21: Platforms and Ledges";
     private static final String TITLE_CONTROL_MOVE_TEXT = "WASD: Move";
     private static final String TITLE_CONTROL_LOOK_TEXT = "Mouse: Look";
     private static final String TITLE_CONTROL_SHOOT_TEXT = "Space: Shoot";
@@ -912,6 +912,9 @@ public class Main3D implements ApplicationListener {
     }
 
     private String getGroundStateLabel(Vector3 actorPosition) {
+        if (actorPosition == player.getPosition() && player.isOnRaisedPlatform(stageObstacles)) {
+            return "Platform";
+        }
         int groundState = floorGrid.getCellStateAtWorldPosition(actorPosition.x, actorPosition.z);
         if (groundState == FloorGrid3D.CELL_STATE_PLAYER) {
             return "Player";

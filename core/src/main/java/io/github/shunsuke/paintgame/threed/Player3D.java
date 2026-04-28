@@ -92,7 +92,7 @@ public class Player3D implements Disposable {
             return;
         }
 
-        int currentGroundState = floorGrid.getCellStateAtWorldPosition(position.x, position.z);
+        int currentGroundState = getCurrentGroundCellState(floorGrid, stageObstacles);
         updateSwimmingState(swimInput, currentGroundState);
         if (jumpJustPressed) {
             // Jumping is only allowed from the floor, so airborne double-jumps never happen.
@@ -106,7 +106,7 @@ public class Player3D implements Disposable {
             moveDirection.add(sideDirection).nor();
 
             // Moving on your own paint should feel better, while enemy paint should slow you down.
-            float speedMultiplier = getGroundSpeedMultiplier(floorGrid.getCellStateAtWorldPosition(position.x, position.z));
+            float speedMultiplier = getGroundSpeedMultiplier(currentGroundState);
             if (swimming) {
                 speedMultiplier *= SWIM_SPEED_MULTIPLIER;
             }
@@ -120,9 +120,9 @@ public class Player3D implements Disposable {
         position.x = MathUtils.clamp(position.x, floorGrid.getMinX() + halfWidth, floorGrid.getMaxX() - halfWidth);
         position.z = MathUtils.clamp(position.z, floorGrid.getMinZ() + halfDepth, floorGrid.getMaxZ() - halfDepth);
 
-        updateVerticalMotion(delta);
+        updateVerticalMotion(delta, stageObstacles);
 
-        int groundStateAfterMove = floorGrid.getCellStateAtWorldPosition(position.x, position.z);
+        int groundStateAfterMove = getCurrentGroundCellState(floorGrid, stageObstacles);
         updateSwimmingState(swimInput, groundStateAfterMove);
         recoverInk(delta, groundStateAfterMove);
 
@@ -183,6 +183,10 @@ public class Player3D implements Disposable {
 
     public boolean isGrounded() {
         return grounded;
+    }
+
+    public boolean isOnRaisedPlatform(StageObstacles3D stageObstacles) {
+        return getSupportHeight(stageObstacles) > 0.001f;
     }
 
     public float getRespawnTimer() {
@@ -301,7 +305,7 @@ public class Player3D implements Disposable {
             floorGrid.getMinX() + PLAYER_WIDTH / 2f,
             floorGrid.getMaxX() - PLAYER_WIDTH / 2f
         );
-        if (!stageObstacles.collidesCircle(candidateX, position.z, COLLISION_RADIUS)) {
+        if (!stageObstacles.collidesCircleForPlayer(candidateX, position.z, COLLISION_RADIUS, getBaseY())) {
             position.x = candidateX;
         }
 
@@ -310,9 +314,16 @@ public class Player3D implements Disposable {
             floorGrid.getMinZ() + PLAYER_DEPTH / 2f,
             floorGrid.getMaxZ() - PLAYER_DEPTH / 2f
         );
-        if (!stageObstacles.collidesCircle(position.x, candidateZ, COLLISION_RADIUS)) {
+        if (!stageObstacles.collidesCircleForPlayer(position.x, candidateZ, COLLISION_RADIUS, getBaseY())) {
             position.z = candidateZ;
         }
+    }
+
+    private int getCurrentGroundCellState(FloorGrid3D floorGrid, StageObstacles3D stageObstacles) {
+        if (isOnRaisedPlatform(stageObstacles)) {
+            return FloorGrid3D.CELL_STATE_EMPTY;
+        }
+        return floorGrid.getCellStateAtWorldPosition(position.x, position.z);
     }
 
     private float getGroundSpeedMultiplier(int groundCellState) {
@@ -354,20 +365,44 @@ public class Player3D implements Disposable {
         }
     }
 
-    private void updateVerticalMotion(float delta) {
+    private void updateVerticalMotion(float delta, StageObstacles3D stageObstacles) {
         if (grounded) {
-            position.y = GROUND_Y;
-            verticalVelocity = 0f;
-            return;
+            float supportHeight = getSupportHeight(stageObstacles);
+            float currentBaseY = getBaseY();
+            if (Math.abs(currentBaseY - supportHeight) <= 0.06f) {
+                position.y = supportHeight + GROUND_Y;
+                verticalVelocity = 0f;
+                return;
+            }
+
+            grounded = false;
         }
 
+        float previousBaseY = getBaseY();
         // A simple gravity model is enough for this early 3D prototype.
         verticalVelocity -= GRAVITY * delta;
         position.y += verticalVelocity * delta;
-        if (position.y <= GROUND_Y) {
+        float nextBaseY = getBaseY();
+        float landingHeight = stageObstacles.getLandingHeightAt(position.x, position.z, COLLISION_RADIUS, previousBaseY, nextBaseY);
+        if (landingHeight > Float.NEGATIVE_INFINITY) {
+            position.y = landingHeight + GROUND_Y;
+            verticalVelocity = 0f;
+            grounded = true;
+            return;
+        }
+
+        if (nextBaseY <= 0f) {
             position.y = GROUND_Y;
             verticalVelocity = 0f;
             grounded = true;
         }
+    }
+
+    private float getSupportHeight(StageObstacles3D stageObstacles) {
+        return stageObstacles.getSupportHeightAt(position.x, position.z, COLLISION_RADIUS, getBaseY());
+    }
+
+    private float getBaseY() {
+        return position.y - GROUND_Y;
     }
 }
