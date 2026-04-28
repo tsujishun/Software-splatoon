@@ -22,6 +22,8 @@ public class Player3D implements Disposable {
     public static final float OWN_PAINT_SPEED_MULTIPLIER = 1.15f;
     public static final float ENEMY_PAINT_SPEED_MULTIPLIER = 0.78f;
     public static final float NEUTRAL_SPEED_MULTIPLIER = 1f;
+    public static final float JUMP_VELOCITY = 5.6f;
+    public static final float GRAVITY = 15f;
     public static final float MAX_INK_AMOUNT = 100f;
     public static final float OWN_PAINT_INK_RECOVERY_PER_SECOND = 28f;
     public static final float SWIM_OWN_PAINT_INK_RECOVERY_PER_SECOND = 54f;
@@ -42,6 +44,7 @@ public class Player3D implements Disposable {
     private static final float SWIM_HEIGHT_SCALE = 0.35f;
     private static final float SWIM_WIDTH_SCALE = 0.92f;
     private static final float SWIM_DEPTH_SCALE = 0.92f;
+    private static final float GROUND_Y = PLAYER_HEIGHT / 2f;
 
     private final Model model;
     private final ModelInstance instance;
@@ -57,6 +60,8 @@ public class Player3D implements Disposable {
     private float invincibleTimer;
     private float inkAmount;
     private boolean swimming;
+    private float verticalVelocity;
+    private boolean grounded;
 
     public Player3D() {
         ModelBuilder modelBuilder = new ModelBuilder();
@@ -79,6 +84,7 @@ public class Player3D implements Disposable {
         Vector3 cameraForward,
         Vector3 cameraRight,
         boolean swimInput,
+        boolean jumpJustPressed,
         StageObstacles3D stageObstacles
     ) {
         updateTimers(delta);
@@ -88,6 +94,10 @@ public class Player3D implements Disposable {
 
         int currentGroundState = floorGrid.getCellStateAtWorldPosition(position.x, position.z);
         updateSwimmingState(swimInput, currentGroundState);
+        if (jumpJustPressed) {
+            // Jumping is only allowed from the floor, so airborne double-jumps never happen.
+            tryJump();
+        }
 
         if (moveForward != 0f || moveSide != 0f) {
             // Convert keyboard input into a direction based on the camera's horizontal view.
@@ -110,6 +120,8 @@ public class Player3D implements Disposable {
         position.x = MathUtils.clamp(position.x, floorGrid.getMinX() + halfWidth, floorGrid.getMaxX() - halfWidth);
         position.z = MathUtils.clamp(position.z, floorGrid.getMinZ() + halfDepth, floorGrid.getMaxZ() - halfDepth);
 
+        updateVerticalMotion(delta);
+
         int groundStateAfterMove = floorGrid.getCellStateAtWorldPosition(position.x, position.z);
         updateSwimmingState(swimInput, groundStateAfterMove);
         recoverInk(delta, groundStateAfterMove);
@@ -125,7 +137,7 @@ public class Player3D implements Disposable {
     }
 
     public void reset() {
-        spawnPosition.set(0f, PLAYER_HEIGHT / 2f, 0f);
+        spawnPosition.set(0f, GROUND_Y, 0f);
         position.set(spawnPosition);
         facingDirection.set(0f, 0f, -1f);
         hp = MAX_HP;
@@ -134,6 +146,8 @@ public class Player3D implements Disposable {
         invincibleTimer = 0f;
         inkAmount = MAX_INK_AMOUNT;
         swimming = false;
+        verticalVelocity = 0f;
+        grounded = true;
         updateTransform();
     }
 
@@ -167,6 +181,10 @@ public class Player3D implements Disposable {
         return invincibleTimer > 0f;
     }
 
+    public boolean isGrounded() {
+        return grounded;
+    }
+
     public float getRespawnTimer() {
         return respawnTimer;
     }
@@ -178,6 +196,9 @@ public class Player3D implements Disposable {
 
         hp = Math.max(0, hp - 1);
         if (hp <= 0) {
+            position.y = GROUND_Y;
+            verticalVelocity = 0f;
+            grounded = true;
             swimming = false;
             splatted = true;
             respawnTimer = RESPAWN_SECONDS;
@@ -208,12 +229,25 @@ public class Player3D implements Disposable {
     }
 
     public void setSwimming(boolean swimming) {
+        if (swimming && !grounded) {
+            return;
+        }
+
         if (this.swimming == swimming) {
             return;
         }
 
         this.swimming = swimming;
         updateTransform();
+    }
+
+    public void tryJump() {
+        if (splatted || swimming || !grounded) {
+            return;
+        }
+
+        grounded = false;
+        verticalVelocity = JUMP_VELOCITY;
     }
 
     @Override
@@ -243,6 +277,8 @@ public class Player3D implements Disposable {
         invincibleTimer = INVINCIBLE_SECONDS;
         inkAmount = MAX_INK_AMOUNT;
         swimming = false;
+        verticalVelocity = 0f;
+        grounded = true;
         updateTransform();
     }
 
@@ -312,9 +348,26 @@ public class Player3D implements Disposable {
     }
 
     private void updateSwimmingState(boolean swimInput, int groundCellState) {
-        boolean canSwim = swimInput && groundCellState == FloorGrid3D.CELL_STATE_PLAYER;
+        boolean canSwim = grounded && swimInput && groundCellState == FloorGrid3D.CELL_STATE_PLAYER;
         if (swimming != canSwim) {
             setSwimming(canSwim);
+        }
+    }
+
+    private void updateVerticalMotion(float delta) {
+        if (grounded) {
+            position.y = GROUND_Y;
+            verticalVelocity = 0f;
+            return;
+        }
+
+        // A simple gravity model is enough for this early 3D prototype.
+        verticalVelocity -= GRAVITY * delta;
+        position.y += verticalVelocity * delta;
+        if (position.y <= GROUND_Y) {
+            position.y = GROUND_Y;
+            verticalVelocity = 0f;
+            grounded = true;
         }
     }
 }

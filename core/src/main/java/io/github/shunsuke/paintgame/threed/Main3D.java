@@ -29,10 +29,11 @@ public class Main3D implements ApplicationListener {
     private static final boolean DEBUG_MODE = false;
     private static final String TITLE_TEXT = "Paint Battle 3D Prototype";
     private static final String TITLE_PROMPT_TEXT = "Press Enter to Start";
-    private static final String STEP_TEXT = "Step 19: Obstacles and Walls";
+    private static final String STEP_TEXT = "Step 20: Jump and Gravity";
     private static final String TITLE_CONTROL_MOVE_TEXT = "WASD: Move";
     private static final String TITLE_CONTROL_LOOK_TEXT = "Mouse: Look";
     private static final String TITLE_CONTROL_SHOOT_TEXT = "Space: Shoot";
+    private static final String TITLE_CONTROL_JUMP_TEXT = "J: Jump";
     private static final String TITLE_CONTROL_SWIM_TEXT = "Shift: Swim on your paint";
     private static final String TITLE_CONTROL_RETURN_TEXT = "R: Return to Title";
     private static final String TITLE_CONTROL_PAUSE_TEXT = "Esc: Pause / Release Mouse";
@@ -315,6 +316,7 @@ public class Main3D implements ApplicationListener {
                 cameraMoveForward,
                 cameraMoveRight,
                 getSwimInput(),
+                getJumpInput(),
                 stageObstacles
             );
             enemyCpu.update(delta, floorGrid, player.getPosition(), !player.isSplatted(), stageObstacles);
@@ -339,9 +341,10 @@ public class Main3D implements ApplicationListener {
             drawCenteredText(TITLE_CONTROL_MOVE_TEXT, hudCamera.viewportHeight / 2f - 64f);
             drawCenteredText(TITLE_CONTROL_LOOK_TEXT, hudCamera.viewportHeight / 2f - 88f);
             drawCenteredText(TITLE_CONTROL_SHOOT_TEXT, hudCamera.viewportHeight / 2f - 112f);
-            drawCenteredText(TITLE_CONTROL_SWIM_TEXT, hudCamera.viewportHeight / 2f - 136f);
-            drawCenteredText(TITLE_CONTROL_RETURN_TEXT, hudCamera.viewportHeight / 2f - 160f);
-            drawCenteredText(TITLE_CONTROL_PAUSE_TEXT, hudCamera.viewportHeight / 2f - 184f);
+            drawCenteredText(TITLE_CONTROL_JUMP_TEXT, hudCamera.viewportHeight / 2f - 136f);
+            drawCenteredText(TITLE_CONTROL_SWIM_TEXT, hudCamera.viewportHeight / 2f - 160f);
+            drawCenteredText(TITLE_CONTROL_RETURN_TEXT, hudCamera.viewportHeight / 2f - 184f);
+            drawCenteredText(TITLE_CONTROL_PAUSE_TEXT, hudCamera.viewportHeight / 2f - 208f);
         } else if (flowState == GameFlowState.COUNTDOWN) {
             drawTopLeftText(STEP_TEXT, 12f, hudCamera.viewportHeight - 12f);
             drawCenteredText(getCountdownText(), hudCamera.viewportHeight / 2f + 12f);
@@ -366,7 +369,7 @@ public class Main3D implements ApplicationListener {
                 hudCamera.viewportHeight - 178f
             );
             drawTopLeftText(String.format("Splats P / E: %d / %d", playerSplatCount, enemySplatCount), 12f, hudCamera.viewportHeight - 200f);
-            drawTopLeftText("Shift: Swim on your paint", 12f, hudCamera.viewportHeight - 222f);
+            drawTopLeftText("J: Jump   Shift: Swim on your paint", 12f, hudCamera.viewportHeight - 222f);
             drawTopLeftText("Esc: Pause   R: Title", 12f, hudCamera.viewportHeight - 244f);
             if (DEBUG_MODE) {
                 drawTopLeftText(DEBUG_PAINT_TEXT, 12f, hudCamera.viewportHeight - 266f);
@@ -890,6 +893,10 @@ public class Main3D implements ApplicationListener {
         return Gdx.input.isKeyPressed(Input.Keys.SHIFT_LEFT) || Gdx.input.isKeyPressed(Input.Keys.SHIFT_RIGHT);
     }
 
+    private boolean getJumpInput() {
+        return Gdx.input.isKeyJustPressed(Input.Keys.J);
+    }
+
     private String getCurrentPaintColorLabel() {
         if (currentPaintCellState == FloorGrid3D.CELL_STATE_ENEMY) {
             return "Enemy";
@@ -916,6 +923,9 @@ public class Main3D implements ApplicationListener {
     }
 
     private String getPlayerModeLabel() {
+        if (!player.isGrounded()) {
+            return "Air";
+        }
         if (player.isSwimming()) {
             return "Swim";
         }
