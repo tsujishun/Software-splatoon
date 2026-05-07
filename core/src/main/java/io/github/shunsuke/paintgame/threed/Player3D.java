@@ -52,6 +52,9 @@ public class Player3D implements Disposable {
     private static final float SWIM_WIDTH_SCALE = 0.92f;
     private static final float SWIM_DEPTH_SCALE = 0.92f;
     private static final float GROUND_Y = PLAYER_HEIGHT / 2f;
+    private static final float CLIMB_SPEED = 2.15f;
+    private static final float CLIMB_ATTACH_EXTRA_DISTANCE = 0.08f;
+    private static final float CLIMB_TOP_MOUNT_EPSILON = 0.06f;
     private static final float BODY_OFFSET_Y = -0.16f;
     private static final float CANOPY_OFFSET_Y = 0.18f;
     private static final float CANOPY_OFFSET_Z = -0.05f;
@@ -86,8 +89,10 @@ public class Player3D implements Disposable {
     private float invincibleTimer;
     private float inkAmount;
     private boolean swimming;
+    private boolean climbing;
     private float verticalVelocity;
     private boolean grounded;
+    private float climbTargetTopY;
 
     public Player3D() {
         ModelBuilder modelBuilder = new ModelBuilder();
@@ -146,6 +151,7 @@ public class Player3D implements Disposable {
         }
 
         int currentGroundState = getCurrentGroundCellState(floorGrid, stageObstacles);
+        updateClimbingState(swimInput, shootHeld, stageObstacles);
         updateSwimmingState(swimInput, shootHeld, currentGroundState);
         if (jumpJustPressed) {
             // Jumping is only allowed from the floor, so airborne double-jumps never happen.
@@ -154,7 +160,7 @@ public class Player3D implements Disposable {
 
         float previousX = position.x;
         float previousZ = position.z;
-        if (moveForward != 0f || moveSide != 0f) {
+        if (!climbing && (moveForward != 0f || moveSide != 0f)) {
             // Convert keyboard input into a direction based on the camera's horizontal view.
             moveDirection.set(cameraForward).scl(moveForward);
             sideDirection.set(cameraRight).scl(moveSide);
@@ -174,9 +180,14 @@ public class Player3D implements Disposable {
         float halfDepth = PLAYER_DEPTH / 2f;
         position.x = MathUtils.clamp(position.x, floorGrid.getMinX() + halfWidth, floorGrid.getMaxX() - halfWidth);
         position.z = MathUtils.clamp(position.z, floorGrid.getMinZ() + halfDepth, floorGrid.getMaxZ() - halfDepth);
+        updateClimbingState(swimInput, shootHeld, stageObstacles);
         updateFacingDirection(previousX, previousZ, cameraForward, shootHeld);
 
-        updateVerticalMotion(delta, stageObstacles);
+        if (climbing) {
+            updateClimbingMotion(delta);
+        } else {
+            updateVerticalMotion(delta, stageObstacles);
+        }
 
         int groundStateAfterMove = getCurrentGroundCellState(floorGrid, stageObstacles);
         updateSwimmingState(swimInput, shootHeld, groundStateAfterMove);
@@ -205,8 +216,10 @@ public class Player3D implements Disposable {
         invincibleTimer = 0f;
         inkAmount = MAX_INK_AMOUNT;
         swimming = false;
+        climbing = false;
         verticalVelocity = 0f;
         grounded = true;
+        climbTargetTopY = 0f;
         updateTransform();
     }
 
@@ -263,6 +276,8 @@ public class Player3D implements Disposable {
             verticalVelocity = 0f;
             grounded = true;
             swimming = false;
+            climbing = false;
+            climbTargetTopY = 0f;
             splatted = true;
             respawnTimer = RESPAWN_SECONDS;
             return true;
@@ -289,6 +304,10 @@ public class Player3D implements Disposable {
 
     public boolean isSwimming() {
         return swimming;
+    }
+
+    public boolean isClimbing() {
+        return climbing;
     }
 
     public void setSwimming(boolean swimming) {
@@ -343,8 +362,10 @@ public class Player3D implements Disposable {
         invincibleTimer = INVINCIBLE_SECONDS;
         inkAmount = MAX_INK_AMOUNT;
         swimming = false;
+        climbing = false;
         verticalVelocity = 0f;
         grounded = true;
+        climbTargetTopY = 0f;
         updateTransform();
     }
 
@@ -421,7 +442,7 @@ public class Player3D implements Disposable {
     }
 
     private int getCurrentGroundCellState(FloorGrid3D floorGrid, StageObstacles3D stageObstacles) {
-        if (isOnRaisedPlatform(stageObstacles)) {
+        if (climbing || isOnRaisedPlatform(stageObstacles)) {
             return FloorGrid3D.CELL_STATE_EMPTY;
         }
         return floorGrid.getCellStateAtWorldPosition(position.x, position.z);
@@ -460,9 +481,57 @@ public class Player3D implements Disposable {
     }
 
     private void updateSwimmingState(boolean swimInput, boolean shootHeld, int groundCellState) {
-        boolean canSwim = !shootHeld && grounded && swimInput && groundCellState == FloorGrid3D.CELL_STATE_PLAYER;
+        boolean canSwim = !climbing && !shootHeld && grounded && swimInput && groundCellState == FloorGrid3D.CELL_STATE_PLAYER;
         if (swimming != canSwim) {
             setSwimming(canSwim);
+        }
+    }
+
+    private void updateClimbingState(boolean climbInput, boolean shootHeld, StageObstacles3D stageObstacles) {
+        if (shootHeld) {
+            stopClimbing();
+            return;
+        }
+
+        float climbTopY = getClimbTopY(stageObstacles);
+        if (climbInput && climbTopY > Float.NEGATIVE_INFINITY) {
+            startClimbing(climbTopY);
+            return;
+        }
+
+        if (!climbInput || climbTopY == Float.NEGATIVE_INFINITY) {
+            stopClimbing();
+        }
+    }
+
+    private void startClimbing(float climbTopY) {
+        climbing = true;
+        climbTargetTopY = climbTopY;
+        swimming = false;
+        grounded = false;
+        verticalVelocity = 0f;
+    }
+
+    private void stopClimbing() {
+        if (!climbing) {
+            return;
+        }
+
+        climbing = false;
+        climbTargetTopY = 0f;
+    }
+
+    private void updateClimbingMotion(float delta) {
+        float climbTargetCenterY = climbTargetTopY + GROUND_Y;
+        position.y = Math.min(climbTargetCenterY, position.y + CLIMB_SPEED * delta);
+        verticalVelocity = 0f;
+        grounded = false;
+
+        if (position.y >= climbTargetCenterY - CLIMB_TOP_MOUNT_EPSILON) {
+            position.y = climbTargetCenterY;
+            grounded = true;
+            climbing = false;
+            climbTargetTopY = 0f;
         }
     }
 
@@ -501,6 +570,16 @@ public class Player3D implements Disposable {
 
     private float getSupportHeight(StageObstacles3D stageObstacles) {
         return stageObstacles.getSupportHeightAt(position.x, position.z, COLLISION_RADIUS, getBaseY());
+    }
+
+    private float getClimbTopY(StageObstacles3D stageObstacles) {
+        return stageObstacles.getPlayerPaintedClimbTopY(
+            position.x,
+            position.z,
+            COLLISION_RADIUS,
+            CLIMB_ATTACH_EXTRA_DISTANCE,
+            getBaseY()
+        );
     }
 
     private float getBaseY() {

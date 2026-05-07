@@ -56,7 +56,7 @@ public class StageObstacles3D implements Disposable {
 
             // A low platform should block the player from the side, but once the player is
             // already above the top surface, it becomes walkable instead of a solid wall.
-            if (!obstacle.standable || playerBaseY < obstacle.topY - PLATFORM_HEIGHT_EPSILON) {
+            if (!isWalkableForPlayer(obstacle) || playerBaseY < obstacle.topY - PLATFORM_HEIGHT_EPSILON) {
                 return true;
             }
         }
@@ -66,7 +66,7 @@ public class StageObstacles3D implements Disposable {
     public float getSupportHeightAt(float centerX, float centerZ, float radius, float actorBaseY) {
         float supportHeight = 0f;
         for (Obstacle3D obstacle : obstacles) {
-            if (!obstacle.standable || !overlapsCircle(obstacle, centerX, centerZ, radius)) {
+            if (!isWalkableForPlayer(obstacle) || !overlapsCircle(obstacle, centerX, centerZ, radius)) {
                 continue;
             }
             if (actorBaseY >= obstacle.topY - PLATFORM_HEIGHT_EPSILON) {
@@ -79,7 +79,7 @@ public class StageObstacles3D implements Disposable {
     public float getLandingHeightAt(float centerX, float centerZ, float radius, float previousBaseY, float nextBaseY) {
         float landingHeight = Float.NEGATIVE_INFINITY;
         for (Obstacle3D obstacle : obstacles) {
-            if (!obstacle.standable || !overlapsCircle(obstacle, centerX, centerZ, radius)) {
+            if (!isWalkableForPlayer(obstacle) || !overlapsCircle(obstacle, centerX, centerZ, radius)) {
                 continue;
             }
             if (previousBaseY >= obstacle.topY - PLATFORM_HEIGHT_EPSILON
@@ -88,6 +88,23 @@ public class StageObstacles3D implements Disposable {
             }
         }
         return landingHeight;
+    }
+
+    public float getPlayerPaintedClimbTopY(float centerX, float centerZ, float radius, float extraDistance, float actorBaseY) {
+        float climbTopY = Float.NEGATIVE_INFINITY;
+        float climbRadius = radius + extraDistance;
+        for (Obstacle3D obstacle : obstacles) {
+            if (obstacle.paintCellState != FloorGrid3D.CELL_STATE_PLAYER) {
+                continue;
+            }
+            if (!overlapsCircle(obstacle, centerX, centerZ, climbRadius)) {
+                continue;
+            }
+            if (actorBaseY < obstacle.topY - PLATFORM_HEIGHT_EPSILON) {
+                climbTopY = Math.max(climbTopY, obstacle.topY);
+            }
+        }
+        return climbTopY;
     }
 
     public boolean paintObstacleAtWorldPosition(float centerX, float centerZ, float radius, int paintCellState) {
@@ -155,6 +172,10 @@ public class StageObstacles3D implements Disposable {
             return ENEMY_PAINTED_OBSTACLE_COLOR;
         }
         return OBSTACLE_COLOR;
+    }
+
+    private boolean isWalkableForPlayer(Obstacle3D obstacle) {
+        return obstacle.standable || obstacle.paintCellState == FloorGrid3D.CELL_STATE_PLAYER;
     }
 
     private boolean overlapsCircle(Obstacle3D obstacle, float centerX, float centerZ, float radius) {
