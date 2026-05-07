@@ -19,6 +19,8 @@ import com.badlogic.gdx.utils.Disposable;
  */
 public class StageObstacles3D implements Disposable {
     private static final Color OBSTACLE_COLOR = new Color(0.45f, 0.52f, 0.6f, 1f);
+    private static final Color PLAYER_PAINTED_OBSTACLE_COLOR = new Color(0.2f, 0.78f, 0.98f, 1f);
+    private static final Color ENEMY_PAINTED_OBSTACLE_COLOR = new Color(0.98f, 0.38f, 0.62f, 1f);
     private static final float PLATFORM_HEIGHT_EPSILON = 0.04f;
 
     private final Array<Obstacle3D> obstacles = new Array<>();
@@ -88,6 +90,26 @@ public class StageObstacles3D implements Disposable {
         return landingHeight;
     }
 
+    public boolean paintObstacleAtWorldPosition(float centerX, float centerZ, float radius, int paintCellState) {
+        for (Obstacle3D obstacle : obstacles) {
+            if (!overlapsCircle(obstacle, centerX, centerZ, radius)) {
+                continue;
+            }
+
+            obstacle.paintCellState = paintCellState;
+            updateObstacleColor(obstacle);
+            return true;
+        }
+        return false;
+    }
+
+    public void resetPaint() {
+        for (Obstacle3D obstacle : obstacles) {
+            obstacle.paintCellState = FloorGrid3D.CELL_STATE_EMPTY;
+            updateObstacleColor(obstacle);
+        }
+    }
+
     @Override
     public void dispose() {
         for (Obstacle3D obstacle : obstacles) {
@@ -121,6 +143,20 @@ public class StageObstacles3D implements Disposable {
         ));
     }
 
+    private void updateObstacleColor(Obstacle3D obstacle) {
+        obstacle.instance.materials.get(0).set(ColorAttribute.createDiffuse(getObstacleColor(obstacle.paintCellState)));
+    }
+
+    private Color getObstacleColor(int paintCellState) {
+        if (paintCellState == FloorGrid3D.CELL_STATE_PLAYER) {
+            return PLAYER_PAINTED_OBSTACLE_COLOR;
+        }
+        if (paintCellState == FloorGrid3D.CELL_STATE_ENEMY) {
+            return ENEMY_PAINTED_OBSTACLE_COLOR;
+        }
+        return OBSTACLE_COLOR;
+    }
+
     private boolean overlapsCircle(Obstacle3D obstacle, float centerX, float centerZ, float radius) {
         float nearestX = MathUtils.clamp(centerX, obstacle.minX, obstacle.maxX);
         float nearestZ = MathUtils.clamp(centerZ, obstacle.minZ, obstacle.maxZ);
@@ -138,6 +174,7 @@ public class StageObstacles3D implements Disposable {
         private final float maxZ;
         private final float topY;
         private final boolean standable;
+        private int paintCellState;
 
         private Obstacle3D(
             Model model,
@@ -157,6 +194,7 @@ public class StageObstacles3D implements Disposable {
             this.maxZ = maxZ;
             this.topY = topY;
             this.standable = standable;
+            this.paintCellState = FloorGrid3D.CELL_STATE_EMPTY;
         }
     }
 }

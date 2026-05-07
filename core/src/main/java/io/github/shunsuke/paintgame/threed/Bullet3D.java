@@ -98,6 +98,7 @@ public class Bullet3D implements Disposable {
             float nextZ = position.z + direction.z * stepDistance;
 
             if (stageObstacles.collidesCircle(nextX, nextZ, collisionRadius)) {
+                stageObstacles.paintObstacleAtWorldPosition(nextX, nextZ, collisionRadius, paintCellState);
                 hitObstacle = true;
                 break;
             }
