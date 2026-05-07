@@ -26,11 +26,16 @@ public class StageObstacles3D implements Disposable {
     private final Array<Obstacle3D> obstacles = new Array<>();
 
     public StageObstacles3D() {
-        // Keep the player spawn near the center and the CPU spawn near the top-right corner clear.
-        addObstacle(-2.4f, -1.6f, 1.5f, 1.8f, 0.72f, true);
-        addObstacle(2.3f, -1.4f, 1.8f, 1.2f, 1.7f, false);
-        addObstacle(-1.7f, 2.0f, 1.2f, 1.9f, 1.4f, false);
-        addObstacle(1.7f, 1.7f, 1.9f, 1.1f, 0.86f, true);
+        // The middle stays readable, but the central block still cuts sight lines.
+        addObstacle(0f, 0f, 1.8f, 1.8f, 1.45f, false);
+
+        // Low side platforms give the jump system a clear purpose without closing the map too much.
+        addObstacle(-3.0f, 0f, 1.3f, 3.0f, 0.82f, true);
+        addObstacle(3.0f, 0f, 1.3f, 3.0f, 0.82f, true);
+
+        // North and south walls are easy to paint and climb, so the wall-climb feature has obvious spots.
+        addObstacle(0f, 3.25f, 3.0f, 1.2f, 1.75f, false);
+        addObstacle(0f, -3.25f, 3.0f, 1.2f, 1.75f, false);
     }
 
     public void render(ModelBatch modelBatch, Environment environment) {

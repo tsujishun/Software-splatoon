@@ -38,7 +38,7 @@ public class EnemyCpu3D implements Disposable {
     private static final float EDGE_MARGIN = 0.35f;
     private static final float DIRECTION_CHANGE_MIN_SECONDS = 1.2f;
     private static final float DIRECTION_CHANGE_MAX_SECONDS = 2.4f;
-    private static final float SPAWN_INSET = 1.3f;
+    private static final float SPAWN_INSET = 1.45f;
     private static final float ATTACK_RANGE = 5.2f;
     private static final float RETREAT_RANGE = 1.9f;
     private static final float APPROACH_RANGE = 3.4f;

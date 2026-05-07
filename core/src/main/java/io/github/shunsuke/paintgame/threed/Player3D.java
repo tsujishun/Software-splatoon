@@ -61,6 +61,8 @@ public class Player3D implements Disposable {
     private static final float CLIMB_TOP_MOUNT_INSET = 0.14f;
     private static final float WALL_JUMP_VERTICAL_VELOCITY = 5.3f;
     private static final float WALL_JUMP_PUSH_DISTANCE = 0.24f;
+    private static final float SPAWN_X = -4.2f;
+    private static final float SPAWN_Z = -4.2f;
     private static final float BODY_OFFSET_Y = -0.16f;
     private static final float CANOPY_OFFSET_Y = 0.18f;
     private static final float CANOPY_OFFSET_Z = -0.05f;
@@ -226,7 +228,8 @@ public class Player3D implements Disposable {
     }
 
     public void reset() {
-        spawnPosition.set(0f, GROUND_Y, 0f);
+        // The stage keeps the lower-left corner open so the player has a safe beginner-friendly spawn.
+        spawnPosition.set(SPAWN_X, GROUND_Y, SPAWN_Z);
         position.set(spawnPosition);
         facingDirection.set(0f, 0f, -1f);
         hp = MAX_HP;
