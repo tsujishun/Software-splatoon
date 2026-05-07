@@ -29,10 +29,11 @@ public class Main3D implements ApplicationListener {
     private static final boolean DEBUG_MODE = false;
     private static final String TITLE_TEXT = "Paint Battle 3D Prototype";
     private static final String TITLE_PROMPT_TEXT = "Press Enter to Start";
-    private static final String STEP_TEXT = "Step 25: Better Stage Layout";
+    private static final String STEP_TEXT = "Step 26: Multiple Weapons";
     private static final String TITLE_CONTROL_MOVE_TEXT = "WASD: Move";
     private static final String TITLE_CONTROL_LOOK_TEXT = "Mouse: Look";
     private static final String TITLE_CONTROL_SHOOT_TEXT = "Space: Shoot";
+    private static final String TITLE_CONTROL_WEAPON_TEXT = "1 / 2 / 3: Switch Weapon";
     private static final String TITLE_CONTROL_JUMP_TEXT = "J: Jump / Wall Jump";
     private static final String TITLE_CONTROL_SWIM_TEXT = "Shift: Swim on floor / Climb painted walls";
     private static final String TITLE_CONTROL_RETURN_TEXT = "R: Return to Title";
@@ -40,6 +41,7 @@ public class Main3D implements ApplicationListener {
     private static final String PLAY_TEXT = "WASD: Move relative to the camera";
     private static final String CAMERA_CONTROL_TEXT = "Move the mouse to control the camera";
     private static final String SHOOT_TEXT = "Space: Shoot in the camera direction";
+    private static final String WEAPON_SWITCH_TEXT = "1 / 2 / 3: Switch weapon";
     private static final String PAUSE_TEXT = "Esc: Pause and release the mouse";
     private static final String DEBUG_PAINT_TEXT = "T: Switch paint color (debug)";
     private static final String RETURN_TEXT = "R: Return to Title";
@@ -324,6 +326,7 @@ public class Main3D implements ApplicationListener {
             fireCooldownRemaining = Math.max(0f, fireCooldownRemaining - delta);
             enemyFireCooldownRemaining = Math.max(0f, enemyFireCooldownRemaining - delta);
             handlePaintColorToggle();
+            handleWeaponSwitchInput();
             handleShootingInput();
             handleEnemyShooting();
             updateBullets(delta);
@@ -342,10 +345,11 @@ public class Main3D implements ApplicationListener {
             drawCenteredText(TITLE_CONTROL_MOVE_TEXT, hudCamera.viewportHeight / 2f - 64f);
             drawCenteredText(TITLE_CONTROL_LOOK_TEXT, hudCamera.viewportHeight / 2f - 88f);
             drawCenteredText(TITLE_CONTROL_SHOOT_TEXT, hudCamera.viewportHeight / 2f - 112f);
-            drawCenteredText(TITLE_CONTROL_JUMP_TEXT, hudCamera.viewportHeight / 2f - 136f);
-            drawCenteredText(TITLE_CONTROL_SWIM_TEXT, hudCamera.viewportHeight / 2f - 160f);
-            drawCenteredText(TITLE_CONTROL_RETURN_TEXT, hudCamera.viewportHeight / 2f - 184f);
-            drawCenteredText(TITLE_CONTROL_PAUSE_TEXT, hudCamera.viewportHeight / 2f - 208f);
+            drawCenteredText(TITLE_CONTROL_WEAPON_TEXT, hudCamera.viewportHeight / 2f - 136f);
+            drawCenteredText(TITLE_CONTROL_JUMP_TEXT, hudCamera.viewportHeight / 2f - 160f);
+            drawCenteredText(TITLE_CONTROL_SWIM_TEXT, hudCamera.viewportHeight / 2f - 184f);
+            drawCenteredText(TITLE_CONTROL_RETURN_TEXT, hudCamera.viewportHeight / 2f - 208f);
+            drawCenteredText(TITLE_CONTROL_PAUSE_TEXT, hudCamera.viewportHeight / 2f - 232f);
         } else if (flowState == GameFlowState.COUNTDOWN) {
             drawTopLeftText(STEP_TEXT, 12f, hudCamera.viewportHeight - 12f);
             drawCenteredText(getCountdownText(), hudCamera.viewportHeight / 2f + 12f);
@@ -357,6 +361,7 @@ public class Main3D implements ApplicationListener {
             drawTopLeftText(String.format("Ink %.0f / %.0f", player.getInkAmount(), Player3D.MAX_INK_AMOUNT), 24f, hudCamera.viewportHeight - 68f);
             drawTopLeftText(String.format("Enemy HP %d / %d", enemyCpu.getHp(), EnemyCpu3D.MAX_HP), hudCamera.viewportWidth - 190f, hudCamera.viewportHeight - 42f);
             drawCenteredText(String.format("Time %d", (int) Math.ceil(remainingTime)), hudCamera.viewportHeight - 18f);
+            drawTopLeftText("Weapon: " + playerWeapon.getName(), 12f, hudCamera.viewportHeight - 90f);
             drawTopLeftText("Mode: " + getPlayerModeLabel(), 12f, hudCamera.viewportHeight - 112f);
             drawTopLeftText("Ground: " + getGroundStateLabel(player.getPosition()), 12f, hudCamera.viewportHeight - 134f);
             drawTopLeftText(
@@ -371,11 +376,12 @@ public class Main3D implements ApplicationListener {
             );
             drawTopLeftText(String.format("Splats P / E: %d / %d", playerSplatCount, enemySplatCount), 12f, hudCamera.viewportHeight - 200f);
             drawTopLeftText("J: Jump / Wall Jump   Shift: Swim / Climb on your paint", 12f, hudCamera.viewportHeight - 222f);
-            drawTopLeftText("Esc: Pause   R: Title", 12f, hudCamera.viewportHeight - 244f);
+            drawTopLeftText(WEAPON_SWITCH_TEXT, 12f, hudCamera.viewportHeight - 244f);
+            drawTopLeftText("Esc: Pause   R: Title", 12f, hudCamera.viewportHeight - 266f);
             if (DEBUG_MODE) {
-                drawTopLeftText(DEBUG_PAINT_TEXT, 12f, hudCamera.viewportHeight - 266f);
-                drawTopLeftText("Current Color: " + getCurrentPaintColorLabel(), 12f, hudCamera.viewportHeight - 288f);
-                drawTopLeftText("Enemy AI: " + enemyCpu.getCurrentState(), 12f, hudCamera.viewportHeight - 310f);
+                drawTopLeftText(DEBUG_PAINT_TEXT, 12f, hudCamera.viewportHeight - 288f);
+                drawTopLeftText("Current Color: " + getCurrentPaintColorLabel(), 12f, hudCamera.viewportHeight - 310f);
+                drawTopLeftText("Enemy AI: " + enemyCpu.getCurrentState(), 12f, hudCamera.viewportHeight - 332f);
             }
 
             if (feedbackMessageTimer > 0f && feedbackMessageText != null && !feedbackMessageText.isEmpty()) {
@@ -396,7 +402,8 @@ public class Main3D implements ApplicationListener {
             drawTopLeftText(String.format("Player HP: %d / %d", player.getHp(), Player3D.MAX_HP), 12f, hudCamera.viewportHeight - 84f);
             drawTopLeftText(String.format("Ink: %.0f / %.0f", player.getInkAmount(), Player3D.MAX_INK_AMOUNT), 12f, hudCamera.viewportHeight - 106f);
             drawTopLeftText(String.format("Enemy HP: %d / %d", enemyCpu.getHp(), EnemyCpu3D.MAX_HP), 12f, hudCamera.viewportHeight - 128f);
-            drawTopLeftText(String.format("Splats P / E: %d / %d", playerSplatCount, enemySplatCount), 12f, hudCamera.viewportHeight - 150f);
+            drawTopLeftText("Weapon: " + playerWeapon.getName(), 12f, hudCamera.viewportHeight - 150f);
+            drawTopLeftText(String.format("Splats P / E: %d / %d", playerSplatCount, enemySplatCount), 12f, hudCamera.viewportHeight - 172f);
             drawTopLeftText(String.format("Time: %d", (int) Math.ceil(remainingTime)), hudCamera.viewportWidth - 120f, hudCamera.viewportHeight - 12f);
             drawCenteredText("Paused", hudCamera.viewportHeight / 2f + 24f);
             drawCenteredText(PAUSE_RESUME_TEXT, hudCamera.viewportHeight / 2f - 8f);
@@ -584,6 +591,7 @@ public class Main3D implements ApplicationListener {
         flowState = GameFlowState.TITLE;
         countdownTimer = COUNTDOWN_TOTAL_SECONDS;
         remainingTime = GAME_DURATION_SECONDS;
+        playerWeapon = WeaponConfig3D.BASIC_SHOOTER;
         fireCooldownRemaining = 0f;
         enemyFireCooldownRemaining = enemyWeapon.getFireInterval();
         currentPaintCellState = FloorGrid3D.CELL_STATE_PLAYER;
@@ -605,6 +613,7 @@ public class Main3D implements ApplicationListener {
         flowState = GameFlowState.COUNTDOWN;
         countdownTimer = COUNTDOWN_TOTAL_SECONDS;
         remainingTime = GAME_DURATION_SECONDS;
+        playerWeapon = WeaponConfig3D.BASIC_SHOOTER;
         fireCooldownRemaining = 0f;
         enemyFireCooldownRemaining = enemyWeapon.getFireInterval();
         currentPaintCellState = FloorGrid3D.CELL_STATE_PLAYER;
@@ -696,6 +705,25 @@ public class Main3D implements ApplicationListener {
                 currentPaintCellState = FloorGrid3D.CELL_STATE_PLAYER;
             }
         }
+    }
+
+    private void handleWeaponSwitchInput() {
+        if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_1)) {
+            setPlayerWeapon(WeaponConfig3D.BASIC_SHOOTER);
+        } else if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_2)) {
+            setPlayerWeapon(WeaponConfig3D.SHORT_PAINTER);
+        } else if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_3)) {
+            setPlayerWeapon(WeaponConfig3D.LONG_SHOOTER);
+        }
+    }
+
+    private void setPlayerWeapon(WeaponConfig3D newWeapon) {
+        if (playerWeapon == newWeapon) {
+            return;
+        }
+
+        playerWeapon = newWeapon;
+        fireCooldownRemaining = Math.min(fireCooldownRemaining, playerWeapon.getFireInterval());
     }
 
     private void handleShootingInput() {

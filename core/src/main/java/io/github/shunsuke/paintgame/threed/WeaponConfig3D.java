@@ -13,6 +13,22 @@ public class WeaponConfig3D {
         0.18f,
         12f
     );
+    public static final WeaponConfig3D SHORT_PAINTER = new WeaponConfig3D(
+        "Short Painter",
+        5.8f,
+        8.2f,
+        0.48f,
+        0.11f,
+        15f
+    );
+    public static final WeaponConfig3D LONG_SHOOTER = new WeaponConfig3D(
+        "Long Shooter",
+        11.5f,
+        11.5f,
+        0.24f,
+        0.3f,
+        16f
+    );
 
     private final String name;
     private final float range;
