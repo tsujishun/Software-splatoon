@@ -33,7 +33,7 @@ public class Main3D implements ApplicationListener {
     private static final String TITLE_CONTROL_MOVE_TEXT = "WASD: Move";
     private static final String TITLE_CONTROL_LOOK_TEXT = "Mouse: Look";
     private static final String TITLE_CONTROL_SHOOT_TEXT = "Space: Shoot";
-    private static final String TITLE_CONTROL_JUMP_TEXT = "J: Jump";
+    private static final String TITLE_CONTROL_JUMP_TEXT = "J: Jump / Wall Jump";
     private static final String TITLE_CONTROL_SWIM_TEXT = "Shift: Swim on floor / Climb painted walls";
     private static final String TITLE_CONTROL_RETURN_TEXT = "R: Return to Title";
     private static final String TITLE_CONTROL_PAUSE_TEXT = "Esc: Pause / Release Mouse";
@@ -370,7 +370,7 @@ public class Main3D implements ApplicationListener {
                 hudCamera.viewportHeight - 178f
             );
             drawTopLeftText(String.format("Splats P / E: %d / %d", playerSplatCount, enemySplatCount), 12f, hudCamera.viewportHeight - 200f);
-            drawTopLeftText("J: Jump   Shift: Swim / Climb on your paint", 12f, hudCamera.viewportHeight - 222f);
+            drawTopLeftText("J: Jump / Wall Jump   Shift: Swim / Climb on your paint", 12f, hudCamera.viewportHeight - 222f);
             drawTopLeftText("Esc: Pause   R: Title", 12f, hudCamera.viewportHeight - 244f);
             if (DEBUG_MODE) {
                 drawTopLeftText(DEBUG_PAINT_TEXT, 12f, hudCamera.viewportHeight - 266f);

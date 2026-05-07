@@ -107,6 +107,70 @@ public class StageObstacles3D implements Disposable {
         return climbTopY;
     }
 
+    public ClimbContact getPlayerPaintedClimbContact(
+        float centerX,
+        float centerZ,
+        float radius,
+        float extraDistance,
+        float actorBaseY
+    ) {
+        ClimbContact bestContact = null;
+        float bestDistanceSquared = Float.MAX_VALUE;
+        float climbRadius = radius + extraDistance;
+
+        for (Obstacle3D obstacle : obstacles) {
+            if (obstacle.paintCellState != FloorGrid3D.CELL_STATE_PLAYER) {
+                continue;
+            }
+            if (actorBaseY >= obstacle.topY - PLATFORM_HEIGHT_EPSILON) {
+                continue;
+            }
+
+            float nearestX = MathUtils.clamp(centerX, obstacle.minX, obstacle.maxX);
+            float nearestZ = MathUtils.clamp(centerZ, obstacle.minZ, obstacle.maxZ);
+            float deltaX = centerX - nearestX;
+            float deltaZ = centerZ - nearestZ;
+            float distanceSquared = deltaX * deltaX + deltaZ * deltaZ;
+            if (distanceSquared > climbRadius * climbRadius) {
+                continue;
+            }
+
+            float minDistanceToFace = Math.abs(centerX - obstacle.minX);
+            float normalX = -1f;
+            float normalZ = 0f;
+
+            float distanceToMaxX = Math.abs(centerX - obstacle.maxX);
+            if (distanceToMaxX < minDistanceToFace) {
+                minDistanceToFace = distanceToMaxX;
+                normalX = 1f;
+                normalZ = 0f;
+            }
+
+            float distanceToMinZ = Math.abs(centerZ - obstacle.minZ);
+            if (distanceToMinZ < minDistanceToFace) {
+                minDistanceToFace = distanceToMinZ;
+                normalX = 0f;
+                normalZ = -1f;
+            }
+
+            float distanceToMaxZ = Math.abs(centerZ - obstacle.maxZ);
+            if (distanceToMaxZ < minDistanceToFace) {
+                normalX = 0f;
+                normalZ = 1f;
+            }
+
+            float tangentX = normalZ;
+            float tangentZ = -normalX;
+
+            if (distanceSquared < bestDistanceSquared) {
+                bestDistanceSquared = distanceSquared;
+                bestContact = new ClimbContact(obstacle.topY, normalX, normalZ, tangentX, tangentZ);
+            }
+        }
+
+        return bestContact;
+    }
+
     public boolean paintObstacleAtWorldPosition(float centerX, float centerZ, float radius, int paintCellState) {
         for (Obstacle3D obstacle : obstacles) {
             if (!overlapsCircle(obstacle, centerX, centerZ, radius)) {
@@ -184,6 +248,22 @@ public class StageObstacles3D implements Disposable {
         float deltaX = centerX - nearestX;
         float deltaZ = centerZ - nearestZ;
         return deltaX * deltaX + deltaZ * deltaZ <= radius * radius;
+    }
+
+    public static class ClimbContact {
+        public final float topY;
+        public final float outwardNormalX;
+        public final float outwardNormalZ;
+        public final float tangentX;
+        public final float tangentZ;
+
+        private ClimbContact(float topY, float outwardNormalX, float outwardNormalZ, float tangentX, float tangentZ) {
+            this.topY = topY;
+            this.outwardNormalX = outwardNormalX;
+            this.outwardNormalZ = outwardNormalZ;
+            this.tangentX = tangentX;
+            this.tangentZ = tangentZ;
+        }
     }
 
     private static class Obstacle3D {

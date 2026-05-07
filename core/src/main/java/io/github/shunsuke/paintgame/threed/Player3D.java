@@ -52,9 +52,15 @@ public class Player3D implements Disposable {
     private static final float SWIM_WIDTH_SCALE = 0.92f;
     private static final float SWIM_DEPTH_SCALE = 0.92f;
     private static final float GROUND_Y = PLAYER_HEIGHT / 2f;
-    private static final float CLIMB_SPEED = 2.15f;
+    private static final float CLIMB_UP_SPEED = 1.55f;
+    private static final float CLIMB_FORWARD_BONUS_SPEED = 1.25f;
+    private static final float CLIMB_DOWN_SPEED = 1.15f;
+    private static final float CLIMB_SIDE_SPEED = 1.65f;
     private static final float CLIMB_ATTACH_EXTRA_DISTANCE = 0.08f;
     private static final float CLIMB_TOP_MOUNT_EPSILON = 0.06f;
+    private static final float CLIMB_TOP_MOUNT_INSET = 0.14f;
+    private static final float WALL_JUMP_VERTICAL_VELOCITY = 5.3f;
+    private static final float WALL_JUMP_PUSH_DISTANCE = 0.24f;
     private static final float BODY_OFFSET_Y = -0.16f;
     private static final float CANOPY_OFFSET_Y = 0.18f;
     private static final float CANOPY_OFFSET_Z = -0.05f;
@@ -77,6 +83,8 @@ public class Player3D implements Disposable {
     private final Vector3 moveDirection = new Vector3();
     private final Vector3 sideDirection = new Vector3();
     private final Vector3 actualMoveDirection = new Vector3();
+    private final Vector3 climbWallNormal = new Vector3(0f, 0f, 1f);
+    private final Vector3 climbWallTangent = new Vector3(1f, 0f, 0f);
     private final Matrix4 actorTransform = new Matrix4();
     private final Color bodyTint = new Color();
     private final Color canopyTint = new Color();
@@ -153,9 +161,15 @@ public class Player3D implements Disposable {
         int currentGroundState = getCurrentGroundCellState(floorGrid, stageObstacles);
         updateClimbingState(swimInput, shootHeld, stageObstacles);
         updateSwimmingState(swimInput, shootHeld, currentGroundState);
+        boolean performedWallJump = false;
         if (jumpJustPressed) {
-            // Jumping is only allowed from the floor, so airborne double-jumps never happen.
-            tryJump();
+            if (climbing) {
+                tryWallJump(floorGrid);
+                performedWallJump = true;
+            } else {
+                // Jumping is only allowed from the floor, so airborne double-jumps never happen.
+                tryJump();
+            }
         }
 
         float previousX = position.x;
@@ -180,11 +194,16 @@ public class Player3D implements Disposable {
         float halfDepth = PLAYER_DEPTH / 2f;
         position.x = MathUtils.clamp(position.x, floorGrid.getMinX() + halfWidth, floorGrid.getMaxX() - halfWidth);
         position.z = MathUtils.clamp(position.z, floorGrid.getMinZ() + halfDepth, floorGrid.getMaxZ() - halfDepth);
-        updateClimbingState(swimInput, shootHeld, stageObstacles);
+        if (!performedWallJump) {
+            updateClimbingState(swimInput, shootHeld, stageObstacles);
+        }
         updateFacingDirection(previousX, previousZ, cameraForward, shootHeld);
 
         if (climbing) {
-            updateClimbingMotion(delta);
+            updateClimbingMotion(delta, moveForward, moveSide, cameraRight, floorGrid, stageObstacles);
+            if (!climbing) {
+                updateVerticalMotion(delta, stageObstacles);
+            }
         } else {
             updateVerticalMotion(delta, stageObstacles);
         }
@@ -493,23 +512,33 @@ public class Player3D implements Disposable {
             return;
         }
 
-        float climbTopY = getClimbTopY(stageObstacles);
-        if (climbInput && climbTopY > Float.NEGATIVE_INFINITY) {
-            startClimbing(climbTopY);
+        StageObstacles3D.ClimbContact climbContact = getClimbContact(stageObstacles);
+        if (climbInput && climbContact != null) {
+            if (!climbing) {
+                startClimbing(climbContact);
+            } else {
+                updateClimbContact(climbContact);
+            }
             return;
         }
 
-        if (!climbInput || climbTopY == Float.NEGATIVE_INFINITY) {
+        if (!climbInput || climbContact == null) {
             stopClimbing();
         }
     }
 
-    private void startClimbing(float climbTopY) {
+    private void startClimbing(StageObstacles3D.ClimbContact climbContact) {
         climbing = true;
-        climbTargetTopY = climbTopY;
         swimming = false;
         grounded = false;
         verticalVelocity = 0f;
+        updateClimbContact(climbContact);
+    }
+
+    private void updateClimbContact(StageObstacles3D.ClimbContact climbContact) {
+        climbTargetTopY = climbContact.topY;
+        climbWallNormal.set(climbContact.outwardNormalX, 0f, climbContact.outwardNormalZ);
+        climbWallTangent.set(climbContact.tangentX, 0f, climbContact.tangentZ);
     }
 
     private void stopClimbing() {
@@ -521,18 +550,63 @@ public class Player3D implements Disposable {
         climbTargetTopY = 0f;
     }
 
-    private void updateClimbingMotion(float delta) {
+    private void updateClimbingMotion(
+        float delta,
+        float moveForward,
+        float moveSide,
+        Vector3 cameraRight,
+        FloorGrid3D floorGrid,
+        StageObstacles3D stageObstacles
+    ) {
         float climbTargetCenterY = climbTargetTopY + GROUND_Y;
-        position.y = Math.min(climbTargetCenterY, position.y + CLIMB_SPEED * delta);
+        float verticalMove = CLIMB_UP_SPEED * delta;
+        if (moveForward > 0f) {
+            verticalMove += moveForward * CLIMB_FORWARD_BONUS_SPEED * delta;
+        } else if (moveForward < 0f) {
+            verticalMove = moveForward * CLIMB_DOWN_SPEED * delta;
+        }
+        position.y = MathUtils.clamp(position.y + verticalMove, GROUND_Y, climbTargetCenterY);
+
+        if (moveSide != 0f) {
+            float tangentAlignment = climbWallTangent.x * cameraRight.x + climbWallTangent.z * cameraRight.z;
+            float tangentDirection = tangentAlignment >= 0f ? 1f : -1f;
+            position.x += climbWallTangent.x * moveSide * tangentDirection * CLIMB_SIDE_SPEED * delta;
+            position.z += climbWallTangent.z * moveSide * tangentDirection * CLIMB_SIDE_SPEED * delta;
+            clampToFloorBounds(floorGrid);
+        }
+
         verticalVelocity = 0f;
         grounded = false;
 
+        StageObstacles3D.ClimbContact climbContact = getClimbContact(stageObstacles);
+        if (climbContact == null) {
+            stopClimbing();
+            return;
+        }
+        updateClimbContact(climbContact);
+
         if (position.y >= climbTargetCenterY - CLIMB_TOP_MOUNT_EPSILON) {
+            position.x -= climbWallNormal.x * CLIMB_TOP_MOUNT_INSET;
+            position.z -= climbWallNormal.z * CLIMB_TOP_MOUNT_INSET;
+            clampToFloorBounds(floorGrid);
             position.y = climbTargetCenterY;
             grounded = true;
-            climbing = false;
-            climbTargetTopY = 0f;
+            stopClimbing();
         }
+    }
+
+    private void tryWallJump(FloorGrid3D floorGrid) {
+        if (!climbing) {
+            return;
+        }
+
+        stopClimbing();
+        swimming = false;
+        grounded = false;
+        verticalVelocity = WALL_JUMP_VERTICAL_VELOCITY;
+        position.x += climbWallNormal.x * WALL_JUMP_PUSH_DISTANCE;
+        position.z += climbWallNormal.z * WALL_JUMP_PUSH_DISTANCE;
+        clampToFloorBounds(floorGrid);
     }
 
     private void updateVerticalMotion(float delta, StageObstacles3D stageObstacles) {
@@ -572,14 +646,19 @@ public class Player3D implements Disposable {
         return stageObstacles.getSupportHeightAt(position.x, position.z, COLLISION_RADIUS, getBaseY());
     }
 
-    private float getClimbTopY(StageObstacles3D stageObstacles) {
-        return stageObstacles.getPlayerPaintedClimbTopY(
+    private StageObstacles3D.ClimbContact getClimbContact(StageObstacles3D stageObstacles) {
+        return stageObstacles.getPlayerPaintedClimbContact(
             position.x,
             position.z,
             COLLISION_RADIUS,
             CLIMB_ATTACH_EXTRA_DISTANCE,
             getBaseY()
         );
+    }
+
+    private void clampToFloorBounds(FloorGrid3D floorGrid) {
+        position.x = MathUtils.clamp(position.x, floorGrid.getMinX() + PLAYER_WIDTH / 2f, floorGrid.getMaxX() - PLAYER_WIDTH / 2f);
+        position.z = MathUtils.clamp(position.z, floorGrid.getMinZ() + PLAYER_DEPTH / 2f, floorGrid.getMaxZ() - PLAYER_DEPTH / 2f);
     }
 
     private float getBaseY() {
