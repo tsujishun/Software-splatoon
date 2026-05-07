@@ -10,12 +10,13 @@ import com.badlogic.gdx.graphics.g3d.ModelInstance;
 import com.badlogic.gdx.graphics.g3d.attributes.ColorAttribute;
 import com.badlogic.gdx.graphics.g3d.utils.ModelBuilder;
 import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.math.Matrix4;
 import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.utils.Disposable;
 
 /**
  * Small beginner-friendly CPU enemy for the 3D prototype.
- * It only moves on the floor, turns now and then, and stays away from the edges.
+ * The AI stays simple, but the body now uses a few primitive parts so it is easier to identify.
  */
 public class EnemyCpu3D implements Disposable {
     public enum EnemyState {
@@ -42,9 +43,25 @@ public class EnemyCpu3D implements Disposable {
     private static final float RETREAT_RANGE = 1.9f;
     private static final float APPROACH_RANGE = 3.4f;
     private static final Color ENEMY_COLOR = new Color(0.95f, 0.45f, 0.7f, 1f);
+    private static final Color ENEMY_HEAD_COLOR = new Color(1f, 0.78f, 0.9f, 1f);
+    private static final Color ENEMY_NOSE_COLOR = new Color(0.42f, 0.08f, 0.26f, 1f);
+    private static final Color ENEMY_MARKER_COLOR = new Color(1f, 0.9f, 0.35f, 1f);
+    private static final Color ENEMY_ATTACK_MARKER_COLOR = new Color(1f, 0.45f, 0.28f, 1f);
+    private static final float BODY_OFFSET_Y = -0.15f;
+    private static final float HEAD_OFFSET_Y = 0.14f;
+    private static final float HEAD_OFFSET_Z = -0.02f;
+    private static final float NOSE_OFFSET_Y = 0.03f;
+    private static final float NOSE_OFFSET_Z = -0.34f;
+    private static final float MARKER_OFFSET_Y = 0.48f;
 
-    private final Model model;
-    private final ModelInstance instance;
+    private final Model bodyModel;
+    private final Model headModel;
+    private final Model noseModel;
+    private final Model markerModel;
+    private final ModelInstance bodyInstance;
+    private final ModelInstance headInstance;
+    private final ModelInstance noseInstance;
+    private final ModelInstance markerInstance;
     private final Vector3 position = new Vector3();
     private final Vector3 spawnPosition = new Vector3();
     private final Vector3 facingDirection = new Vector3(0f, 0f, -1f);
@@ -54,6 +71,11 @@ public class EnemyCpu3D implements Disposable {
     private final Vector3 targetDirection = new Vector3();
     private final Vector3 retreatDirection = new Vector3();
     private final Vector3 sidestepDirection = new Vector3();
+    private final Matrix4 actorTransform = new Matrix4();
+    private final Color bodyTint = new Color();
+    private final Color headTint = new Color();
+    private final Color noseTint = new Color();
+    private final Color markerTint = new Color();
 
     private float directionChangeTimer;
     private int hp;
@@ -64,16 +86,42 @@ public class EnemyCpu3D implements Disposable {
 
     public EnemyCpu3D() {
         ModelBuilder modelBuilder = new ModelBuilder();
-        model = modelBuilder.createSphere(
-            ENEMY_DIAMETER,
-            ENEMY_DIAMETER,
-            ENEMY_DIAMETER,
+        bodyModel = modelBuilder.createSphere(
+            0.82f,
+            0.42f,
+            0.82f,
             16,
             16,
             new Material(ColorAttribute.createDiffuse(ENEMY_COLOR)),
             Usage.Position | Usage.Normal
         );
-        instance = new ModelInstance(model);
+        headModel = modelBuilder.createSphere(
+            0.48f,
+            0.44f,
+            0.48f,
+            16,
+            16,
+            new Material(ColorAttribute.createDiffuse(ENEMY_HEAD_COLOR)),
+            Usage.Position | Usage.Normal
+        );
+        noseModel = modelBuilder.createBox(
+            0.14f,
+            0.16f,
+            0.28f,
+            new Material(ColorAttribute.createDiffuse(ENEMY_NOSE_COLOR)),
+            Usage.Position | Usage.Normal
+        );
+        markerModel = modelBuilder.createBox(
+            0.62f,
+            0.05f,
+            0.62f,
+            new Material(ColorAttribute.createDiffuse(ENEMY_MARKER_COLOR)),
+            Usage.Position | Usage.Normal
+        );
+        bodyInstance = new ModelInstance(bodyModel);
+        headInstance = new ModelInstance(headModel);
+        noseInstance = new ModelInstance(noseModel);
+        markerInstance = new ModelInstance(markerModel);
     }
 
     public void update(
@@ -118,7 +166,10 @@ public class EnemyCpu3D implements Disposable {
         if (splatted) {
             return;
         }
-        modelBatch.render(instance, environment);
+        modelBatch.render(bodyInstance, environment);
+        modelBatch.render(headInstance, environment);
+        modelBatch.render(noseInstance, environment);
+        modelBatch.render(markerInstance, environment);
     }
 
     public void reset(FloorGrid3D floorGrid) {
@@ -182,7 +233,10 @@ public class EnemyCpu3D implements Disposable {
 
     @Override
     public void dispose() {
-        model.dispose();
+        bodyModel.dispose();
+        headModel.dispose();
+        noseModel.dispose();
+        markerModel.dispose();
     }
 
     private void updateTimers(float delta, FloorGrid3D floorGrid) {
@@ -308,7 +362,37 @@ public class EnemyCpu3D implements Disposable {
     }
 
     private void updateTransform() {
-        instance.transform.setToTranslation(position);
+        float facingAngleDegrees = MathUtils.atan2(facingDirection.x, -facingDirection.z) * MathUtils.radiansToDegrees;
+        actorTransform.idt();
+        actorTransform.translate(position.x, position.y, position.z);
+        actorTransform.rotate(Vector3.Y, facingAngleDegrees);
+
+        setPartTransform(bodyInstance, 0f, BODY_OFFSET_Y, 0f);
+        setPartTransform(headInstance, 0f, HEAD_OFFSET_Y, HEAD_OFFSET_Z);
+        setPartTransform(noseInstance, 0f, NOSE_OFFSET_Y, NOSE_OFFSET_Z);
+        setPartTransform(markerInstance, 0f, MARKER_OFFSET_Y, 0f);
+
+        float invincibleFlash = getInvincibleFlash();
+        setInstanceColor(bodyInstance, bodyTint.set(ENEMY_COLOR).lerp(Color.WHITE, invincibleFlash));
+        setInstanceColor(headInstance, headTint.set(ENEMY_HEAD_COLOR).lerp(Color.WHITE, invincibleFlash));
+        setInstanceColor(noseInstance, noseTint.set(ENEMY_NOSE_COLOR).lerp(Color.WHITE, invincibleFlash * 0.5f));
+        Color markerBaseColor = currentState == EnemyState.ATTACK ? ENEMY_ATTACK_MARKER_COLOR : ENEMY_MARKER_COLOR;
+        setInstanceColor(markerInstance, markerTint.set(markerBaseColor).lerp(Color.WHITE, invincibleFlash));
+    }
+
+    private void setPartTransform(ModelInstance partInstance, float offsetX, float offsetY, float offsetZ) {
+        partInstance.transform.set(actorTransform).translate(offsetX, offsetY, offsetZ);
+    }
+
+    private void setInstanceColor(ModelInstance partInstance, Color color) {
+        partInstance.materials.get(0).set(ColorAttribute.createDiffuse(color));
+    }
+
+    private float getInvincibleFlash() {
+        if (invincibleTimer <= 0f) {
+            return 0f;
+        }
+        return 0.25f + 0.28f * (0.5f + 0.5f * MathUtils.sin(invincibleTimer * 22f));
     }
 
     private boolean moveWithObstacleCollision(

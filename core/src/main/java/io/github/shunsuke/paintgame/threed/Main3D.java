@@ -29,7 +29,7 @@ public class Main3D implements ApplicationListener {
     private static final boolean DEBUG_MODE = false;
     private static final String TITLE_TEXT = "Paint Battle 3D Prototype";
     private static final String TITLE_PROMPT_TEXT = "Press Enter to Start";
-    private static final String STEP_TEXT = "Step 21: Platforms and Ledges";
+    private static final String STEP_TEXT = "Step 22: Character Visuals";
     private static final String TITLE_CONTROL_MOVE_TEXT = "WASD: Move";
     private static final String TITLE_CONTROL_LOOK_TEXT = "Mouse: Look";
     private static final String TITLE_CONTROL_SHOOT_TEXT = "Space: Shoot";
@@ -307,7 +307,7 @@ public class Main3D implements ApplicationListener {
 
             updateCameraControl();
             updateCameraMovementBasis();
-            player.setFacingDirection(cameraMoveForward);
+            boolean shootHeld = isShootInputHeld();
             player.update(
                 delta,
                 floorGrid,
@@ -317,6 +317,7 @@ public class Main3D implements ApplicationListener {
                 cameraMoveRight,
                 getSwimInput(),
                 getJumpInput(),
+                shootHeld,
                 stageObstacles
             );
             enemyCpu.update(delta, floorGrid, player.getPosition(), !player.isSplatted(), stageObstacles);
@@ -710,6 +711,8 @@ public class Main3D implements ApplicationListener {
                 break;
             }
 
+            // Shooting should make the player visually face the same horizontal direction as the shot.
+            player.setFacingDirection(cameraMoveForward);
             bullets.add(new Bullet3D(
                 player.getPosition(),
                 cameraMoveForward,
@@ -895,6 +898,10 @@ public class Main3D implements ApplicationListener {
 
     private boolean getJumpInput() {
         return Gdx.input.isKeyJustPressed(Input.Keys.J);
+    }
+
+    private boolean isShootInputHeld() {
+        return Gdx.input.isKeyPressed(Input.Keys.SPACE);
     }
 
     private String getCurrentPaintColorLabel() {

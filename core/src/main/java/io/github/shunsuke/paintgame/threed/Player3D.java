@@ -10,12 +10,13 @@ import com.badlogic.gdx.graphics.g3d.ModelInstance;
 import com.badlogic.gdx.graphics.g3d.attributes.ColorAttribute;
 import com.badlogic.gdx.graphics.g3d.utils.ModelBuilder;
 import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.math.Matrix4;
 import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.utils.Disposable;
 
 /**
- * Simple player object for the early 3D phases.
- * The player only moves on the floor plane for now.
+ * Beginner-friendly player object for the 3D prototype.
+ * The look stays simple, but it now uses a few primitive parts so the facing direction is easier to read.
  */
 public class Player3D implements Disposable {
     public static final float MOVE_SPEED = 4.5f;
@@ -40,19 +41,44 @@ public class Player3D implements Disposable {
     private static final float PLAYER_DEPTH = 0.78f;
     private static final float COLLISION_RADIUS = 0.34f;
     private static final Color PLAYER_COLOR = new Color(0.25f, 0.7f, 0.95f, 1f);
+    private static final Color PLAYER_ACCENT_COLOR = new Color(0.84f, 0.95f, 1f, 1f);
+    private static final Color PLAYER_NOSE_COLOR = new Color(0.08f, 0.18f, 0.32f, 1f);
+    private static final Color PLAYER_PACK_COLOR = new Color(0.13f, 0.47f, 0.76f, 1f);
     private static final Color SWIM_COLOR = new Color(0.1f, 0.48f, 0.75f, 1f);
+    private static final Color SWIM_ACCENT_COLOR = new Color(0.55f, 0.82f, 0.98f, 1f);
+    private static final Color SWIM_NOSE_COLOR = new Color(0.05f, 0.12f, 0.2f, 1f);
+    private static final Color SWIM_PACK_COLOR = new Color(0.07f, 0.32f, 0.52f, 1f);
     private static final float SWIM_HEIGHT_SCALE = 0.35f;
     private static final float SWIM_WIDTH_SCALE = 0.92f;
     private static final float SWIM_DEPTH_SCALE = 0.92f;
     private static final float GROUND_Y = PLAYER_HEIGHT / 2f;
+    private static final float BODY_OFFSET_Y = -0.16f;
+    private static final float CANOPY_OFFSET_Y = 0.18f;
+    private static final float CANOPY_OFFSET_Z = -0.05f;
+    private static final float NOSE_OFFSET_Y = -0.02f;
+    private static final float NOSE_OFFSET_Z = -0.47f;
+    private static final float PACK_OFFSET_Y = 0.03f;
+    private static final float PACK_OFFSET_Z = 0.29f;
 
-    private final Model model;
-    private final ModelInstance instance;
+    private final Model bodyModel;
+    private final Model canopyModel;
+    private final Model noseModel;
+    private final Model packModel;
+    private final ModelInstance bodyInstance;
+    private final ModelInstance canopyInstance;
+    private final ModelInstance noseInstance;
+    private final ModelInstance packInstance;
     private final Vector3 position = new Vector3();
     private final Vector3 spawnPosition = new Vector3();
     private final Vector3 facingDirection = new Vector3(0f, 0f, -1f);
     private final Vector3 moveDirection = new Vector3();
     private final Vector3 sideDirection = new Vector3();
+    private final Vector3 actualMoveDirection = new Vector3();
+    private final Matrix4 actorTransform = new Matrix4();
+    private final Color bodyTint = new Color();
+    private final Color canopyTint = new Color();
+    private final Color noseTint = new Color();
+    private final Color packTint = new Color();
 
     private int hp;
     private boolean splatted;
@@ -65,14 +91,40 @@ public class Player3D implements Disposable {
 
     public Player3D() {
         ModelBuilder modelBuilder = new ModelBuilder();
-        model = modelBuilder.createBox(
-            PLAYER_WIDTH,
-            PLAYER_HEIGHT,
-            PLAYER_DEPTH,
+        bodyModel = modelBuilder.createBox(
+            0.58f,
+            0.56f,
+            0.78f,
             new Material(ColorAttribute.createDiffuse(PLAYER_COLOR)),
             Usage.Position | Usage.Normal
         );
-        instance = new ModelInstance(model);
+        canopyModel = modelBuilder.createSphere(
+            0.34f,
+            0.32f,
+            0.34f,
+            16,
+            16,
+            new Material(ColorAttribute.createDiffuse(PLAYER_ACCENT_COLOR)),
+            Usage.Position | Usage.Normal
+        );
+        noseModel = modelBuilder.createBox(
+            0.16f,
+            0.18f,
+            0.26f,
+            new Material(ColorAttribute.createDiffuse(PLAYER_NOSE_COLOR)),
+            Usage.Position | Usage.Normal
+        );
+        packModel = modelBuilder.createBox(
+            0.26f,
+            0.34f,
+            0.18f,
+            new Material(ColorAttribute.createDiffuse(PLAYER_PACK_COLOR)),
+            Usage.Position | Usage.Normal
+        );
+        bodyInstance = new ModelInstance(bodyModel);
+        canopyInstance = new ModelInstance(canopyModel);
+        noseInstance = new ModelInstance(noseModel);
+        packInstance = new ModelInstance(packModel);
         reset();
     }
 
@@ -85,6 +137,7 @@ public class Player3D implements Disposable {
         Vector3 cameraRight,
         boolean swimInput,
         boolean jumpJustPressed,
+        boolean shootHeld,
         StageObstacles3D stageObstacles
     ) {
         updateTimers(delta);
@@ -93,12 +146,14 @@ public class Player3D implements Disposable {
         }
 
         int currentGroundState = getCurrentGroundCellState(floorGrid, stageObstacles);
-        updateSwimmingState(swimInput, currentGroundState);
+        updateSwimmingState(swimInput, shootHeld, currentGroundState);
         if (jumpJustPressed) {
             // Jumping is only allowed from the floor, so airborne double-jumps never happen.
             tryJump();
         }
 
+        float previousX = position.x;
+        float previousZ = position.z;
         if (moveForward != 0f || moveSide != 0f) {
             // Convert keyboard input into a direction based on the camera's horizontal view.
             moveDirection.set(cameraForward).scl(moveForward);
@@ -119,11 +174,12 @@ public class Player3D implements Disposable {
         float halfDepth = PLAYER_DEPTH / 2f;
         position.x = MathUtils.clamp(position.x, floorGrid.getMinX() + halfWidth, floorGrid.getMaxX() - halfWidth);
         position.z = MathUtils.clamp(position.z, floorGrid.getMinZ() + halfDepth, floorGrid.getMaxZ() - halfDepth);
+        updateFacingDirection(previousX, previousZ, cameraForward, shootHeld);
 
         updateVerticalMotion(delta, stageObstacles);
 
         int groundStateAfterMove = getCurrentGroundCellState(floorGrid, stageObstacles);
-        updateSwimmingState(swimInput, groundStateAfterMove);
+        updateSwimmingState(swimInput, shootHeld, groundStateAfterMove);
         recoverInk(delta, groundStateAfterMove);
 
         updateTransform();
@@ -133,7 +189,10 @@ public class Player3D implements Disposable {
         if (splatted) {
             return;
         }
-        modelBatch.render(instance, environment);
+        modelBatch.render(bodyInstance, environment);
+        modelBatch.render(canopyInstance, environment);
+        modelBatch.render(noseInstance, environment);
+        modelBatch.render(packInstance, environment);
     }
 
     public void reset() {
@@ -256,7 +315,10 @@ public class Player3D implements Disposable {
 
     @Override
     public void dispose() {
-        model.dispose();
+        bodyModel.dispose();
+        canopyModel.dispose();
+        noseModel.dispose();
+        packModel.dispose();
     }
 
     private void updateTimers(float delta) {
@@ -287,16 +349,55 @@ public class Player3D implements Disposable {
     }
 
     private void updateTransform() {
-        float facingAngleDegrees = MathUtils.atan2(facingDirection.x, -facingDirection.z) * MathUtils.radiansToDegrees;
+        // The player model is built facing local -Z, so the Y rotation needs the opposite sign
+        // to keep the nose on the true front side for left and right movement as well.
+        float facingAngleDegrees = -MathUtils.atan2(facingDirection.x, -facingDirection.z) * MathUtils.radiansToDegrees;
         float heightScale = swimming ? SWIM_HEIGHT_SCALE : 1f;
         float widthScale = swimming ? SWIM_WIDTH_SCALE : 1f;
         float depthScale = swimming ? SWIM_DEPTH_SCALE : 1f;
         float visualY = position.y - PLAYER_HEIGHT * (1f - heightScale) * 0.32f;
-        instance.transform.idt();
-        instance.transform.translate(position.x, visualY, position.z);
-        instance.transform.rotate(Vector3.Y, facingAngleDegrees);
-        instance.transform.scale(widthScale, heightScale, depthScale);
-        instance.materials.get(0).set(ColorAttribute.createDiffuse(swimming ? SWIM_COLOR : PLAYER_COLOR));
+        actorTransform.idt();
+        actorTransform.translate(position.x, visualY, position.z);
+        actorTransform.rotate(Vector3.Y, facingAngleDegrees);
+        actorTransform.scale(widthScale, heightScale, depthScale);
+
+        setPartTransform(bodyInstance, 0f, BODY_OFFSET_Y, 0f);
+        setPartTransform(canopyInstance, 0f, CANOPY_OFFSET_Y, CANOPY_OFFSET_Z);
+        setPartTransform(noseInstance, 0f, NOSE_OFFSET_Y, NOSE_OFFSET_Z);
+        setPartTransform(packInstance, 0f, PACK_OFFSET_Y, PACK_OFFSET_Z);
+
+        float invincibleFlash = getInvincibleFlash();
+        setInstanceColor(bodyInstance, bodyTint.set(swimming ? SWIM_COLOR : PLAYER_COLOR).lerp(Color.WHITE, invincibleFlash));
+        setInstanceColor(canopyInstance, canopyTint.set(swimming ? SWIM_ACCENT_COLOR : PLAYER_ACCENT_COLOR).lerp(Color.WHITE, invincibleFlash));
+        setInstanceColor(noseInstance, noseTint.set(swimming ? SWIM_NOSE_COLOR : PLAYER_NOSE_COLOR).lerp(Color.WHITE, invincibleFlash * 0.6f));
+        setInstanceColor(packInstance, packTint.set(swimming ? SWIM_PACK_COLOR : PLAYER_PACK_COLOR).lerp(Color.WHITE, invincibleFlash));
+    }
+
+    private void setPartTransform(ModelInstance partInstance, float offsetX, float offsetY, float offsetZ) {
+        partInstance.transform.set(actorTransform).translate(offsetX, offsetY, offsetZ);
+    }
+
+    private void setInstanceColor(ModelInstance partInstance, Color color) {
+        partInstance.materials.get(0).set(ColorAttribute.createDiffuse(color));
+    }
+
+    private void updateFacingDirection(float previousX, float previousZ, Vector3 cameraForward, boolean shootHeld) {
+        if (shootHeld) {
+            setFacingDirection(cameraForward);
+            return;
+        }
+
+        actualMoveDirection.set(position.x - previousX, 0f, position.z - previousZ);
+        if (!actualMoveDirection.isZero(0.0001f)) {
+            facingDirection.set(actualMoveDirection).nor();
+        }
+    }
+
+    private float getInvincibleFlash() {
+        if (invincibleTimer <= 0f) {
+            return 0f;
+        }
+        return 0.28f + 0.3f * (0.5f + 0.5f * MathUtils.sin(invincibleTimer * 24f));
     }
 
     private void moveWithObstacleCollision(float moveDistance, FloorGrid3D floorGrid, StageObstacles3D stageObstacles) {
@@ -358,8 +459,8 @@ public class Player3D implements Disposable {
         return NEUTRAL_INK_RECOVERY_PER_SECOND;
     }
 
-    private void updateSwimmingState(boolean swimInput, int groundCellState) {
-        boolean canSwim = grounded && swimInput && groundCellState == FloorGrid3D.CELL_STATE_PLAYER;
+    private void updateSwimmingState(boolean swimInput, boolean shootHeld, int groundCellState) {
+        boolean canSwim = !shootHeld && grounded && swimInput && groundCellState == FloorGrid3D.CELL_STATE_PLAYER;
         if (swimming != canSwim) {
             setSwimming(canSwim);
         }
