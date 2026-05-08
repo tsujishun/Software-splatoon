@@ -31,3 +31,18 @@ Useful Gradle tasks and flags:
 
 Note that most tasks that are not specific to a single project can be run with `name:` prefix, where the `name` should be replaced with the ID of a specific project.
 For example, `core:clean` removes `build` folder only from the `core` project.
+
+## Placeholder sounds
+
+The 3D prototype can use simple placeholder WAV files under `assets/audio`.
+You can regenerate the development sounds with:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/generate_placeholder_sounds.ps1
+```
+
+If Python is available in your environment, there is also a Python version:
+
+```powershell
+python tools/generate_placeholder_sounds.py
+```

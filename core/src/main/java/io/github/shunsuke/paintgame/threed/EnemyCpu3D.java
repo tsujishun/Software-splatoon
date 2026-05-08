@@ -33,6 +33,8 @@ public class EnemyCpu3D implements Disposable {
     public static final float HIT_RADIUS = 0.42f;
     public static final float RESPAWN_SECONDS = 2.6f;
     public static final float INVINCIBLE_SECONDS = 1.1f;
+    public static final float FIRE_INTERVAL_MULTIPLIER = 1.15f;
+    public static final float MOVE_SPEED_MULTIPLIER = 0.92f;
 
     private static final float ENEMY_DIAMETER = 0.7f;
     private static final float EDGE_MARGIN = 0.35f;
@@ -42,6 +44,7 @@ public class EnemyCpu3D implements Disposable {
     private static final float ATTACK_RANGE = 5.2f;
     private static final float RETREAT_RANGE = 1.9f;
     private static final float APPROACH_RANGE = 3.4f;
+    private static final float AIM_ACCURACY = 6f;
     private static final Color ENEMY_COLOR = new Color(0.95f, 0.45f, 0.7f, 1f);
     private static final Color ENEMY_HEAD_COLOR = new Color(1f, 0.78f, 0.9f, 1f);
     private static final Color ENEMY_NOSE_COLOR = new Color(0.42f, 0.08f, 0.26f, 1f);
@@ -76,6 +79,7 @@ public class EnemyCpu3D implements Disposable {
     private final Color headTint = new Color();
     private final Color noseTint = new Color();
     private final Color markerTint = new Color();
+    private final WeaponConfig3D weaponConfig = WeaponConfig3D.ENEMY_SHOOTER;
 
     private float directionChangeTimer;
     private int hp;
@@ -140,7 +144,7 @@ public class EnemyCpu3D implements Disposable {
         updateBehavior(delta, playerPosition, playerTargetable);
 
         float speedMultiplier = getGroundSpeedMultiplier(floorGrid.getCellStateAtWorldPosition(position.x, position.z));
-        float moveSpeed = MOVE_SPEED * speedMultiplier;
+        float moveSpeed = MOVE_SPEED * MOVE_SPEED_MULTIPLIER * speedMultiplier;
         nextPosition.set(position).mulAdd(moveDirection, moveSpeed * delta);
 
         float radius = ENEMY_DIAMETER / 2f;
@@ -231,6 +235,14 @@ public class EnemyCpu3D implements Disposable {
         return currentState;
     }
 
+    public WeaponConfig3D getWeaponConfig() {
+        return weaponConfig;
+    }
+
+    public float getFireIntervalMultiplier() {
+        return FIRE_INTERVAL_MULTIPLIER;
+    }
+
     @Override
     public void dispose() {
         bodyModel.dispose();
@@ -267,7 +279,7 @@ public class EnemyCpu3D implements Disposable {
 
     private void updateBehavior(float delta, Vector3 playerPosition, boolean playerTargetable) {
         if (playerTargetable && isPlayerInsideAttackRange(playerPosition)) {
-            updateAttackBehavior(playerPosition);
+            updateAttackBehavior(playerPosition, delta);
             return;
         }
 
@@ -284,7 +296,7 @@ public class EnemyCpu3D implements Disposable {
         return deltaX * deltaX + deltaZ * deltaZ <= ATTACK_RANGE * ATTACK_RANGE;
     }
 
-    private void updateAttackBehavior(Vector3 playerPosition) {
+    private void updateAttackBehavior(Vector3 playerPosition, float delta) {
         currentState = EnemyState.ATTACK;
         targetDirection.set(playerPosition.x - position.x, 0f, playerPosition.z - position.z);
         if (targetDirection.isZero(0.0001f)) {
@@ -293,7 +305,8 @@ public class EnemyCpu3D implements Disposable {
             targetDirection.nor();
         }
 
-        facingDirection.set(targetDirection);
+        float aimAlpha = Math.min(1f, AIM_ACCURACY * delta);
+        facingDirection.lerp(targetDirection, aimAlpha).nor();
 
         float deltaX = playerPosition.x - position.x;
         float deltaZ = playerPosition.z - position.z;

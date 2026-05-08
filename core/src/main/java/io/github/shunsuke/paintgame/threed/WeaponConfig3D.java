@@ -29,6 +29,14 @@ public class WeaponConfig3D {
         0.3f,
         16f
     );
+    public static final WeaponConfig3D ENEMY_SHOOTER = new WeaponConfig3D(
+        "Enemy Shooter",
+        7.4f,
+        8.6f,
+        0.33f,
+        0.22f,
+        10f
+    );
 
     private final String name;
     private final float range;

@@ -29,7 +29,7 @@ public class Main3D implements ApplicationListener {
     private static final boolean DEBUG_MODE = false;
     private static final String TITLE_TEXT = "Paint Battle 3D Prototype";
     private static final String TITLE_PROMPT_TEXT = "Press Enter to Start";
-    private static final String STEP_TEXT = "Step 26: Multiple Weapons";
+    private static final String STEP_TEXT = "Step 27: Simple Sound Effects";
     private static final String TITLE_CONTROL_MOVE_TEXT = "WASD: Move";
     private static final String TITLE_CONTROL_LOOK_TEXT = "Mouse: Look";
     private static final String TITLE_CONTROL_SHOOT_TEXT = "Space: Shoot";
@@ -48,6 +48,7 @@ public class Main3D implements ApplicationListener {
     private static final String PAUSE_RESUME_TEXT = "Press Esc or Enter to resume";
     private static final float COUNTDOWN_TOTAL_SECONDS = 4f;
     private static final float GAME_DURATION_SECONDS = 60f;
+    private static final float INK_EMPTY_SOUND_COOLDOWN = 0.22f;
     private static final float CAMERA_DISTANCE = 4.5f;
     private static final float CAMERA_LOOK_HEIGHT = 0.4f;
     private static final float CAMERA_LOOK_AHEAD = 0.8f;
@@ -93,6 +94,7 @@ public class Main3D implements ApplicationListener {
     private ShapeRenderer shapeRenderer;
     private BitmapFont font;
     private GlyphLayout glyphLayout;
+    private AudioManager3D audioManager;
     private FloorGrid3D floorGrid;
     private StageObstacles3D stageObstacles;
     private Player3D player;
@@ -109,7 +111,6 @@ public class Main3D implements ApplicationListener {
     private float countdownTimer;
     private float remainingTime;
     private WeaponConfig3D playerWeapon;
-    private WeaponConfig3D enemyWeapon;
     private float fireCooldownRemaining;
     private float enemyFireCooldownRemaining;
     private float cameraYaw;
@@ -129,6 +130,8 @@ public class Main3D implements ApplicationListener {
     private float feedbackMessageTimer;
     private String feedbackMessageText;
     private final Color feedbackMessageColor = new Color(Color.WHITE);
+    private int lastCountdownCue;
+    private float inkEmptySoundCooldownRemaining;
 
     @Override
     public void create() {
@@ -138,6 +141,7 @@ public class Main3D implements ApplicationListener {
         font = new BitmapFont();
         font.setColor(Color.WHITE);
         glyphLayout = new GlyphLayout();
+        audioManager = new AudioManager3D();
 
         environment = new Environment();
         environment.set(new ColorAttribute(ColorAttribute.AmbientLight, 0.8f, 0.8f, 0.85f, 1f));
@@ -149,12 +153,11 @@ public class Main3D implements ApplicationListener {
         enemyCpu = new EnemyCpu3D();
         enemyCpu.reset(floorGrid);
         playerWeapon = WeaponConfig3D.BASIC_SHOOTER;
-        enemyWeapon = WeaponConfig3D.BASIC_SHOOTER;
         flowState = GameFlowState.TITLE;
         countdownTimer = COUNTDOWN_TOTAL_SECONDS;
         remainingTime = GAME_DURATION_SECONDS;
         fireCooldownRemaining = 0f;
-        enemyFireCooldownRemaining = enemyWeapon.getFireInterval();
+        enemyFireCooldownRemaining = getEnemyFireInterval();
         mouseCaptured = false;
         currentPaintCellState = FloorGrid3D.CELL_STATE_PLAYER;
         resetMatchResult();
@@ -162,6 +165,8 @@ public class Main3D implements ApplicationListener {
         enemySplatCount = 0;
         resetCombatFeedback();
         resetCameraAngles();
+        lastCountdownCue = Integer.MIN_VALUE;
+        inkEmptySoundCooldownRemaining = 0f;
         setMouseCapture(false);
 
         resize(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
@@ -246,6 +251,9 @@ public class Main3D implements ApplicationListener {
         if (font != null) {
             font.dispose();
         }
+        if (audioManager != null) {
+            audioManager.dispose();
+        }
         if (floorGrid != null) {
             floorGrid.dispose();
         }
@@ -288,6 +296,7 @@ public class Main3D implements ApplicationListener {
 
         if (flowState == GameFlowState.COUNTDOWN) {
             countdownTimer -= delta;
+            updateCountdownAudio();
             if (countdownTimer <= 0f) {
                 countdownTimer = 0f;
                 flowState = GameFlowState.PLAYING;
@@ -325,6 +334,7 @@ public class Main3D implements ApplicationListener {
             enemyCpu.update(delta, floorGrid, player.getPosition(), !player.isSplatted(), stageObstacles);
             fireCooldownRemaining = Math.max(0f, fireCooldownRemaining - delta);
             enemyFireCooldownRemaining = Math.max(0f, enemyFireCooldownRemaining - delta);
+            inkEmptySoundCooldownRemaining = Math.max(0f, inkEmptySoundCooldownRemaining - delta);
             handlePaintColorToggle();
             handleWeaponSwitchInput();
             handleShootingInput();
@@ -382,6 +392,7 @@ public class Main3D implements ApplicationListener {
                 drawTopLeftText(DEBUG_PAINT_TEXT, 12f, hudCamera.viewportHeight - 288f);
                 drawTopLeftText("Current Color: " + getCurrentPaintColorLabel(), 12f, hudCamera.viewportHeight - 310f);
                 drawTopLeftText("Enemy AI: " + enemyCpu.getCurrentState(), 12f, hudCamera.viewportHeight - 332f);
+                drawTopLeftText("Enemy Weapon: " + enemyCpu.getWeaponConfig().getName(), 12f, hudCamera.viewportHeight - 354f);
             }
 
             if (feedbackMessageTimer > 0f && feedbackMessageText != null && !feedbackMessageText.isEmpty()) {
@@ -593,13 +604,15 @@ public class Main3D implements ApplicationListener {
         remainingTime = GAME_DURATION_SECONDS;
         playerWeapon = WeaponConfig3D.BASIC_SHOOTER;
         fireCooldownRemaining = 0f;
-        enemyFireCooldownRemaining = enemyWeapon.getFireInterval();
+        enemyFireCooldownRemaining = getEnemyFireInterval();
         currentPaintCellState = FloorGrid3D.CELL_STATE_PLAYER;
         resetMatchResult();
         playerSplatCount = 0;
         enemySplatCount = 0;
         resetCombatFeedback();
         resetCameraAngles();
+        lastCountdownCue = Integer.MIN_VALUE;
+        inkEmptySoundCooldownRemaining = 0f;
         setMouseCapture(false);
         snapCameraToPlayer();
     }
@@ -615,13 +628,15 @@ public class Main3D implements ApplicationListener {
         remainingTime = GAME_DURATION_SECONDS;
         playerWeapon = WeaponConfig3D.BASIC_SHOOTER;
         fireCooldownRemaining = 0f;
-        enemyFireCooldownRemaining = enemyWeapon.getFireInterval();
+        enemyFireCooldownRemaining = getEnemyFireInterval();
         currentPaintCellState = FloorGrid3D.CELL_STATE_PLAYER;
         resetMatchResult();
         playerSplatCount = 0;
         enemySplatCount = 0;
         resetCombatFeedback();
         resetCameraAngles();
+        lastCountdownCue = Integer.MIN_VALUE;
+        inkEmptySoundCooldownRemaining = 0f;
         setMouseCapture(false);
         snapCameraToPlayer();
     }
@@ -650,6 +665,7 @@ public class Main3D implements ApplicationListener {
         flowState = GameFlowState.GAME_OVER;
         clearBullets();
         resetCombatFeedback();
+        audioManager.playGameOver();
         setMouseCapture(false);
     }
 
@@ -664,6 +680,33 @@ public class Main3D implements ApplicationListener {
             return "1";
         }
         return "GO!";
+    }
+
+    private void updateCountdownAudio() {
+        int countdownCue = getCountdownCueIndex();
+        if (countdownCue == lastCountdownCue) {
+            return;
+        }
+
+        lastCountdownCue = countdownCue;
+        if (countdownCue == 0) {
+            audioManager.playCountdownGo();
+        } else {
+            audioManager.playCountdownBeep();
+        }
+    }
+
+    private int getCountdownCueIndex() {
+        if (countdownTimer > 3f) {
+            return 3;
+        }
+        if (countdownTimer > 2f) {
+            return 2;
+        }
+        if (countdownTimer > 1f) {
+            return 1;
+        }
+        return 0;
     }
 
     private void updateCameraPosition(float delta) {
@@ -724,6 +767,7 @@ public class Main3D implements ApplicationListener {
 
         playerWeapon = newWeapon;
         fireCooldownRemaining = Math.min(fireCooldownRemaining, playerWeapon.getFireInterval());
+        audioManager.playWeaponSwitch();
     }
 
     private void handleShootingInput() {
@@ -738,11 +782,13 @@ public class Main3D implements ApplicationListener {
         // Holding Space should keep firing at the weapon's configured interval.
         while (Gdx.input.isKeyPressed(Input.Keys.SPACE) && fireCooldownRemaining <= 0f) {
             if (!player.consumeInk(playerWeapon.getInkCost())) {
+                playInkEmptySoundIfNeeded();
                 break;
             }
 
             // Shooting should make the player visually face the same horizontal direction as the shot.
             player.setFacingDirection(cameraMoveForward);
+            audioManager.playPlayerShoot();
             bullets.add(new Bullet3D(
                 player.getPosition(),
                 cameraMoveForward,
@@ -760,6 +806,8 @@ public class Main3D implements ApplicationListener {
         }
 
         while (enemyFireCooldownRemaining <= 0f) {
+            WeaponConfig3D enemyWeapon = enemyCpu.getWeaponConfig();
+            audioManager.playEnemyShoot();
             bullets.add(new Bullet3D(
                 enemyCpu.getPosition(),
                 enemyCpu.getFacingDirection(),
@@ -767,7 +815,7 @@ public class Main3D implements ApplicationListener {
                 Bullet3D.OWNER_ENEMY,
                 FloorGrid3D.CELL_STATE_ENEMY
             ));
-            enemyFireCooldownRemaining += enemyWeapon.getFireInterval();
+            enemyFireCooldownRemaining += getEnemyFireInterval();
         }
     }
 
@@ -790,8 +838,10 @@ public class Main3D implements ApplicationListener {
                 && !enemyCpu.isInvincible()
                 && isHitOnFloorPlane(bullet.getPosition(), enemyCpu.getPosition(), enemyCpu.getHitRadius())) {
                 enemyHitFlashTimer = ENEMY_HIT_FLASH_DURATION;
+                audioManager.playHit();
                 if (enemyCpu.takeHit()) {
                     playerSplatCount++;
+                    audioManager.playEnemySplatted();
                     showFeedbackMessage("Enemy Splatted!", FEEDBACK_SPLAT_COLOR, SPLAT_MESSAGE_DURATION);
                 } else {
                     showFeedbackMessage("Hit!", FEEDBACK_HIT_COLOR, HIT_MESSAGE_DURATION);
@@ -806,8 +856,10 @@ public class Main3D implements ApplicationListener {
                 && !player.isInvincible()
                 && isHitOnFloorPlane(bullet.getPosition(), player.getPosition(), player.getHitRadius())) {
                 playerHitFlashTimer = PLAYER_HIT_FLASH_DURATION;
+                audioManager.playHit();
                 if (player.takeHit()) {
                     enemySplatCount++;
+                    audioManager.playPlayerSplatted();
                 }
                 return true;
             }
@@ -946,6 +998,19 @@ public class Main3D implements ApplicationListener {
             return currentPaintCellState;
         }
         return FloorGrid3D.CELL_STATE_PLAYER;
+    }
+
+    private void playInkEmptySoundIfNeeded() {
+        if (inkEmptySoundCooldownRemaining > 0f) {
+            return;
+        }
+
+        audioManager.playInkEmpty();
+        inkEmptySoundCooldownRemaining = INK_EMPTY_SOUND_COOLDOWN;
+    }
+
+    private float getEnemyFireInterval() {
+        return enemyCpu.getWeaponConfig().getFireInterval() * enemyCpu.getFireIntervalMultiplier();
     }
 
     private String getGroundStateLabel(Vector3 actorPosition) {
