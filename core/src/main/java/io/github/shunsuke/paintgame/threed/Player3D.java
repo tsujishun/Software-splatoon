@@ -19,22 +19,23 @@ import com.badlogic.gdx.utils.Disposable;
  * The look stays simple, but it now uses a few primitive parts so the facing direction is easier to read.
  */
 public class Player3D implements Disposable {
-    public static final float MOVE_SPEED = 4.5f;
-    public static final float OWN_PAINT_SPEED_MULTIPLIER = 1.15f;
-    public static final float ENEMY_PAINT_SPEED_MULTIPLIER = 0.78f;
+    // These player tuning values are intentionally grouped here so playtesting can tweak them quickly.
+    public static final float MOVE_SPEED = 4.7f;
+    public static final float OWN_PAINT_SPEED_MULTIPLIER = 1.18f;
+    public static final float ENEMY_PAINT_SPEED_MULTIPLIER = 0.82f;
     public static final float NEUTRAL_SPEED_MULTIPLIER = 1f;
-    public static final float JUMP_VELOCITY = 5.6f;
-    public static final float GRAVITY = 15f;
-    public static final float MAX_INK_AMOUNT = 100f;
-    public static final float OWN_PAINT_INK_RECOVERY_PER_SECOND = 28f;
-    public static final float SWIM_OWN_PAINT_INK_RECOVERY_PER_SECOND = 54f;
-    public static final float NEUTRAL_INK_RECOVERY_PER_SECOND = 0f;
+    public static final float JUMP_VELOCITY = 5.8f;
+    public static final float GRAVITY = 16.2f;
+    public static final float MAX_INK_AMOUNT = 110f;
+    public static final float OWN_PAINT_INK_RECOVERY_PER_SECOND = 36f;
+    public static final float SWIM_OWN_PAINT_INK_RECOVERY_PER_SECOND = 72f;
+    public static final float NEUTRAL_INK_RECOVERY_PER_SECOND = 4f;
     public static final float ENEMY_PAINT_INK_RECOVERY_PER_SECOND = 0f;
-    public static final float SWIM_SPEED_MULTIPLIER = 1.4f;
+    public static final float SWIM_SPEED_MULTIPLIER = 1.45f;
     public static final int MAX_HP = 3;
     public static final float HIT_RADIUS = 0.42f;
-    public static final float RESPAWN_SECONDS = 2.2f;
-    public static final float INVINCIBLE_SECONDS = 1.2f;
+    public static final float RESPAWN_SECONDS = 2.1f;
+    public static final float INVINCIBLE_SECONDS = 1.1f;
 
     private static final float PLAYER_WIDTH = 0.52f;
     private static final float PLAYER_HEIGHT = 0.9f;

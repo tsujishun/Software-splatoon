@@ -5,9 +5,9 @@ package io.github.shunsuke.paintgame.threed;
  * The values only tweak the existing CPU behavior a little, so the match still feels fair.
  */
 public enum CpuDifficulty3D {
-    EASY("Easy", 4.4f, 4.2f, 1.35f, 0.82f),
-    NORMAL("Normal", 5.2f, 6f, 1.15f, 0.92f),
-    HARD("Hard", 6.0f, 8.2f, 0.95f, 1.02f);
+    EASY("Easy", 4.2f, 3.6f, 1.55f, 0.76f),
+    NORMAL("Normal", 5.2f, 5.4f, 1.22f, 0.88f),
+    HARD("Hard", 6.2f, 7.2f, 1.0f, 0.98f);
 
     private final String label;
     private final float attackRange;

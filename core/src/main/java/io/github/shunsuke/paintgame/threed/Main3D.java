@@ -36,7 +36,7 @@ public class Main3D implements ApplicationListener {
     private static final boolean DEBUG_MODE = false;
     private static final String TITLE_TEXT = "Paint Battle 3D Prototype";
     private static final String TITLE_PROMPT_TEXT = "Use W/S or Up/Down, Enter to Select";
-    private static final String STEP_TEXT = "Step 30: Title Menu Setup";
+    private static final String STEP_TEXT = "Step 31: Balance Tuning";
     private static final String TITLE_CONTROL_MOVE_TEXT = "WASD: Move";
     private static final String TITLE_CONTROL_LOOK_TEXT = "Mouse: Look";
     private static final String TITLE_CONTROL_SHOOT_TEXT = "Space: Shoot";
@@ -56,6 +56,7 @@ public class Main3D implements ApplicationListener {
     private static final String RETURN_TEXT = "R: Return to Title";
     private static final String PAUSE_RESUME_TEXT = "Press Esc or Enter to resume";
     private static final float COUNTDOWN_TOTAL_SECONDS = 4f;
+    // Lower this during playtests if you want faster balance checks.
     private static final float GAME_DURATION_SECONDS = 60f;
     private static final float INK_EMPTY_SOUND_COOLDOWN = 0.22f;
     private static final float CAMERA_DISTANCE = 4.5f;
@@ -487,27 +488,29 @@ public class Main3D implements ApplicationListener {
             drawTopLeftText(String.format("Enemy HP %d / %d", enemyCpu.getHp(), EnemyCpu3D.MAX_HP), hudCamera.viewportWidth - 190f, hudCamera.viewportHeight - 42f);
             drawCenteredText(String.format("Time %d", (int) Math.ceil(remainingTime)), hudCamera.viewportHeight - 18f);
             drawTopLeftText("Weapon: " + playerWeapon.getName(), 12f, hudCamera.viewportHeight - 90f);
-            drawTopLeftText("Mode: " + getPlayerModeLabel(), 12f, hudCamera.viewportHeight - 112f);
-            drawTopLeftText("Ground: " + getGroundStateLabel(player.getPosition()), 12f, hudCamera.viewportHeight - 134f);
+            drawTopLeftText(
+                "Mode: " + getPlayerModeLabel() + "   Ground: " + getGroundStateLabel(player.getPosition()),
+                12f,
+                hudCamera.viewportHeight - 112f
+            );
             drawTopLeftText(
                 String.format("Player Paint: %d (%.1f%%)", floorGrid.getPlayerPaintedCellCount(), floorGrid.getPlayerPaintRatePercent()),
                 12f,
-                hudCamera.viewportHeight - 156f
+                hudCamera.viewportHeight - 140f
             );
             drawTopLeftText(
                 String.format("Enemy Paint: %d (%.1f%%)", floorGrid.getEnemyPaintedCellCount(), floorGrid.getEnemyPaintRatePercent()),
                 12f,
-                hudCamera.viewportHeight - 178f
+                hudCamera.viewportHeight - 162f
             );
-            drawTopLeftText(String.format("Splats P / E: %d / %d", playerSplatCount, enemySplatCount), 12f, hudCamera.viewportHeight - 200f);
-            drawTopLeftText("J: Jump / Wall Jump   Shift: Swim / Climb on your paint", 12f, hudCamera.viewportHeight - 222f);
-            drawTopLeftText(WEAPON_SWITCH_TEXT, 12f, hudCamera.viewportHeight - 244f);
-            drawTopLeftText("Esc: Pause   M: Mute   R: Title", 12f, hudCamera.viewportHeight - 266f);
+            drawTopLeftText(String.format("Splats P / E: %d / %d", playerSplatCount, enemySplatCount), 12f, hudCamera.viewportHeight - 184f);
+            drawTopLeftText("J: Jump / Wall Jump   Shift: Swim / Climb   1 / 2 / 3: Weapon", 12f, hudCamera.viewportHeight - 206f);
+            drawTopLeftText("Esc: Pause   M: Mute   R: Title", 12f, hudCamera.viewportHeight - 228f);
             if (DEBUG_MODE) {
-                drawTopLeftText(DEBUG_PAINT_TEXT, 12f, hudCamera.viewportHeight - 288f);
-                drawTopLeftText("Current Color: " + getCurrentPaintColorLabel(), 12f, hudCamera.viewportHeight - 310f);
-                drawTopLeftText("Enemy AI: " + enemyCpu.getCurrentState(), 12f, hudCamera.viewportHeight - 332f);
-                drawTopLeftText("Enemy Weapon: " + enemyCpu.getWeaponConfig().getName(), 12f, hudCamera.viewportHeight - 354f);
+                drawTopLeftText(DEBUG_PAINT_TEXT, 12f, hudCamera.viewportHeight - 252f);
+                drawTopLeftText("Current Color: " + getCurrentPaintColorLabel(), 12f, hudCamera.viewportHeight - 274f);
+                drawTopLeftText("Enemy AI: " + enemyCpu.getCurrentState(), 12f, hudCamera.viewportHeight - 296f);
+                drawTopLeftText("Enemy Weapon: " + enemyCpu.getWeaponConfig().getName(), 12f, hudCamera.viewportHeight - 318f);
             }
 
             if (feedbackMessageTimer > 0f && feedbackMessageText != null && !feedbackMessageText.isEmpty()) {

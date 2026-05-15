@@ -26,16 +26,16 @@ public class StageObstacles3D implements Disposable {
     private final Array<Obstacle3D> obstacles = new Array<>();
 
     public StageObstacles3D() {
-        // The middle stays readable, but the central block still cuts sight lines.
-        addObstacle(0f, 0f, 1.8f, 1.8f, 1.45f, false);
+        // Keep the center readable while still giving both sides a solid line-of-sight break.
+        addObstacle(0f, 0f, 1.65f, 1.65f, 1.35f, false);
 
-        // Low side platforms give the jump system a clear purpose without closing the map too much.
-        addObstacle(-3.0f, 0f, 1.3f, 3.0f, 0.82f, true);
-        addObstacle(3.0f, 0f, 1.3f, 3.0f, 0.82f, true);
+        // Low side platforms are a little wider now so jump routes are easier to read.
+        addObstacle(-2.9f, 0f, 1.45f, 2.7f, 0.82f, true);
+        addObstacle(2.9f, 0f, 1.45f, 2.7f, 0.82f, true);
 
-        // North and south walls are easy to paint and climb, so the wall-climb feature has obvious spots.
-        addObstacle(0f, 3.25f, 3.0f, 1.2f, 1.75f, false);
-        addObstacle(0f, -3.25f, 3.0f, 1.2f, 1.75f, false);
+        // Slightly narrower climb walls leave clearer side lanes for beginner playtests.
+        addObstacle(0f, 3.1f, 2.6f, 1.2f, 1.75f, false);
+        addObstacle(0f, -3.1f, 2.6f, 1.2f, 1.75f, false);
     }
 
     public void render(ModelBatch modelBatch, Environment environment) {

@@ -5,36 +5,39 @@ package io.github.shunsuke.paintgame.threed;
  * We start with one weapon so later phases can add more without rewriting bullet logic again.
  */
 public class WeaponConfig3D {
+    // Standard all-rounder for learning the prototype.
     public static final WeaponConfig3D BASIC_SHOOTER = new WeaponConfig3D(
         "Basic Shooter",
-        8f,
-        9f,
-        0.35f,
-        0.18f,
-        12f
+        8.2f,
+        9.2f,
+        0.34f,
+        0.16f,
+        8.5f
     );
+    // Short range, wide paint, and fast output. It spends ink quickly if you mash it.
     public static final WeaponConfig3D SHORT_PAINTER = new WeaponConfig3D(
         "Short Painter",
-        5.8f,
-        8.2f,
-        0.48f,
-        0.11f,
-        15f
+        5.2f,
+        7.6f,
+        0.56f,
+        0.095f,
+        10.5f
     );
+    // Longer reach and faster bullets, but slower firing and a tighter paint spread.
     public static final WeaponConfig3D LONG_SHOOTER = new WeaponConfig3D(
         "Long Shooter",
-        11.5f,
-        11.5f,
-        0.24f,
-        0.3f,
-        16f
+        12.4f,
+        12.0f,
+        0.22f,
+        0.34f,
+        12.5f
     );
     public static final WeaponConfig3D ENEMY_SHOOTER = new WeaponConfig3D(
         "Enemy Shooter",
-        7.4f,
-        8.6f,
-        0.33f,
-        0.22f,
+        7.1f,
+        8.4f,
+        0.32f,
+        0.26f,
         10f
     );
 
