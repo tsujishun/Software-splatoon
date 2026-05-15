@@ -73,6 +73,35 @@ SOUNDS: dict[str, list[ToneEvent]] = {
         ToneEvent(0.06, 280, 240, "square", 0.85),
         ToneEvent(0.06, 240, 200, "square", 0.75),
     ],
+    "title_bgm.wav": [
+        ToneEvent(0.22, 392, 392, "sine", 0.40),
+        ToneEvent(0.22, 523, 523, "sine", 0.38),
+        ToneEvent(0.22, 659, 659, "sine", 0.40),
+        ToneEvent(0.22, 523, 523, "sine", 0.38),
+        ToneEvent(0.22, 440, 440, "sine", 0.40),
+        ToneEvent(0.22, 587, 587, "sine", 0.38),
+        ToneEvent(0.22, 698, 698, "sine", 0.40),
+        ToneEvent(0.22, 587, 587, "sine", 0.38),
+    ],
+    "battle_bgm.wav": [
+        ToneEvent(0.14, 196, 196, "square", 0.32),
+        ToneEvent(0.14, 247, 247, "square", 0.30),
+        ToneEvent(0.14, 294, 294, "square", 0.32),
+        ToneEvent(0.14, 247, 247, "square", 0.30),
+        ToneEvent(0.14, 220, 220, "square", 0.32),
+        ToneEvent(0.14, 277, 277, "square", 0.30),
+        ToneEvent(0.14, 330, 330, "square", 0.32),
+        ToneEvent(0.14, 277, 277, "square", 0.30),
+        ToneEvent(0.18, 196, 196, "sine", 0.18),
+        ToneEvent(0.18, 220, 220, "sine", 0.18),
+    ],
+    "result_bgm.wav": [
+        ToneEvent(0.28, 523, 523, "sine", 0.42),
+        ToneEvent(0.28, 659, 659, "sine", 0.40),
+        ToneEvent(0.28, 784, 784, "sine", 0.42),
+        ToneEvent(0.34, 1046, 1046, "sine", 0.44),
+        ToneEvent(0.32, 784, 784, "sine", 0.32),
+    ],
 }
 
 
@@ -126,7 +155,7 @@ def main() -> None:
     for filename, events in SOUNDS.items():
         write_wav(output_dir / filename, build_sound(events))
 
-    print("Generated placeholder sounds:")
+    print("Generated placeholder audio:")
     for filename in sorted(SOUNDS):
         print(f" - assets/audio/{filename}")
 

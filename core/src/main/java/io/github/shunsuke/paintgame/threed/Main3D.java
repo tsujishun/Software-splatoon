@@ -29,7 +29,7 @@ public class Main3D implements ApplicationListener {
     private static final boolean DEBUG_MODE = false;
     private static final String TITLE_TEXT = "Paint Battle 3D Prototype";
     private static final String TITLE_PROMPT_TEXT = "Press Enter to Start";
-    private static final String STEP_TEXT = "Step 27: Simple Sound Effects";
+    private static final String STEP_TEXT = "Step 29: Better Result Screen";
     private static final String TITLE_CONTROL_MOVE_TEXT = "WASD: Move";
     private static final String TITLE_CONTROL_LOOK_TEXT = "Mouse: Look";
     private static final String TITLE_CONTROL_SHOOT_TEXT = "Space: Shoot";
@@ -38,6 +38,7 @@ public class Main3D implements ApplicationListener {
     private static final String TITLE_CONTROL_SWIM_TEXT = "Shift: Swim on floor / Climb painted walls";
     private static final String TITLE_CONTROL_RETURN_TEXT = "R: Return to Title";
     private static final String TITLE_CONTROL_PAUSE_TEXT = "Esc: Pause / Release Mouse";
+    private static final String TITLE_CONTROL_MUTE_TEXT = "M: Mute";
     private static final String PLAY_TEXT = "WASD: Move relative to the camera";
     private static final String CAMERA_CONTROL_TEXT = "Move the mouse to control the camera";
     private static final String SHOOT_TEXT = "Space: Shoot in the camera direction";
@@ -68,6 +69,8 @@ public class Main3D implements ApplicationListener {
     private static final float STATUS_BAR_HEIGHT = 14f;
     private static final float STATUS_BAR_MARGIN = 16f;
     private static final float STATUS_PANEL_HEIGHT = 28f;
+    private static final float RESULT_PANEL_WIDTH = 460f;
+    private static final float RESULT_PANEL_HEIGHT = 290f;
     private static final float PLAYER_HIT_FLASH_DURATION = 0.22f;
     private static final float ENEMY_HIT_FLASH_DURATION = 0.2f;
     private static final float HIT_MESSAGE_DURATION = 0.65f;
@@ -123,6 +126,9 @@ public class Main3D implements ApplicationListener {
     private int finalTotalTiles;
     private float finalPlayerPaintRate;
     private float finalEnemyPaintRate;
+    private int finalPlayerSplats;
+    private int finalEnemySplats;
+    private String finalWeaponName;
     private int playerSplatCount;
     private int enemySplatCount;
     private float playerHitFlashTimer;
@@ -142,6 +148,7 @@ public class Main3D implements ApplicationListener {
         font.setColor(Color.WHITE);
         glyphLayout = new GlyphLayout();
         audioManager = new AudioManager3D();
+        audioManager.playTitleBgm();
 
         environment = new Environment();
         environment.set(new ColorAttribute(ColorAttribute.AmbientLight, 0.8f, 0.8f, 0.85f, 1f));
@@ -222,6 +229,7 @@ public class Main3D implements ApplicationListener {
         Gdx.gl.glDisable(GL20.GL_DEPTH_TEST);
         hudCamera.update();
         drawCombatShapes();
+        drawResultScreenShapes();
         spriteBatch.setProjectionMatrix(hudCamera.combined);
         drawOverlay();
         drawCrosshair();
@@ -270,6 +278,15 @@ public class Main3D implements ApplicationListener {
     }
 
     private void handleGlobalInput() {
+        if (Gdx.input.isKeyJustPressed(Input.Keys.M)) {
+            audioManager.toggleMute();
+        }
+
+        if (flowState == GameFlowState.GAME_OVER && Gdx.input.isKeyJustPressed(Input.Keys.ENTER)) {
+            startCountdown();
+            return;
+        }
+
         if (flowState != GameFlowState.TITLE && Gdx.input.isKeyJustPressed(Input.Keys.R)) {
             goToTitleScreen();
             return;
@@ -360,6 +377,7 @@ public class Main3D implements ApplicationListener {
             drawCenteredText(TITLE_CONTROL_SWIM_TEXT, hudCamera.viewportHeight / 2f - 184f);
             drawCenteredText(TITLE_CONTROL_RETURN_TEXT, hudCamera.viewportHeight / 2f - 208f);
             drawCenteredText(TITLE_CONTROL_PAUSE_TEXT, hudCamera.viewportHeight / 2f - 232f);
+            drawCenteredText(TITLE_CONTROL_MUTE_TEXT, hudCamera.viewportHeight / 2f - 256f);
         } else if (flowState == GameFlowState.COUNTDOWN) {
             drawTopLeftText(STEP_TEXT, 12f, hudCamera.viewportHeight - 12f);
             drawCenteredText(getCountdownText(), hudCamera.viewportHeight / 2f + 12f);
@@ -387,7 +405,7 @@ public class Main3D implements ApplicationListener {
             drawTopLeftText(String.format("Splats P / E: %d / %d", playerSplatCount, enemySplatCount), 12f, hudCamera.viewportHeight - 200f);
             drawTopLeftText("J: Jump / Wall Jump   Shift: Swim / Climb on your paint", 12f, hudCamera.viewportHeight - 222f);
             drawTopLeftText(WEAPON_SWITCH_TEXT, 12f, hudCamera.viewportHeight - 244f);
-            drawTopLeftText("Esc: Pause   R: Title", 12f, hudCamera.viewportHeight - 266f);
+            drawTopLeftText("Esc: Pause   M: Mute   R: Title", 12f, hudCamera.viewportHeight - 266f);
             if (DEBUG_MODE) {
                 drawTopLeftText(DEBUG_PAINT_TEXT, 12f, hudCamera.viewportHeight - 288f);
                 drawTopLeftText("Current Color: " + getCurrentPaintColorLabel(), 12f, hudCamera.viewportHeight - 310f);
@@ -418,28 +436,11 @@ public class Main3D implements ApplicationListener {
             drawTopLeftText(String.format("Time: %d", (int) Math.ceil(remainingTime)), hudCamera.viewportWidth - 120f, hudCamera.viewportHeight - 12f);
             drawCenteredText("Paused", hudCamera.viewportHeight / 2f + 24f);
             drawCenteredText(PAUSE_RESUME_TEXT, hudCamera.viewportHeight / 2f - 8f);
-            drawCenteredText(RETURN_TEXT, hudCamera.viewportHeight / 2f - 40f);
+            drawCenteredText("M: Mute", hudCamera.viewportHeight / 2f - 40f);
+            drawCenteredText(RETURN_TEXT, hudCamera.viewportHeight / 2f - 72f);
         } else if (flowState == GameFlowState.GAME_OVER) {
             drawTopLeftText(STEP_TEXT, 12f, hudCamera.viewportHeight - 12f);
-            drawTopLeftText("Player: " + finalPlayerScore, 12f, hudCamera.viewportHeight - 34f);
-            drawTopLeftText("Enemy: " + finalEnemyScore, 12f, hudCamera.viewportHeight - 56f);
-            drawTopLeftText("Player Splats: " + playerSplatCount, 12f, hudCamera.viewportHeight - 78f);
-            drawTopLeftText("Enemy Splats: " + enemySplatCount, 12f, hudCamera.viewportHeight - 100f);
-            drawTopLeftText("Total: " + finalTotalTiles, 12f, hudCamera.viewportHeight - 122f);
-            drawTopLeftText(String.format("Player Paint Rate: %.1f%%", finalPlayerPaintRate), 12f, hudCamera.viewportHeight - 144f);
-            drawTopLeftText(String.format("Enemy Paint Rate: %.1f%%", finalEnemyPaintRate), 12f, hudCamera.viewportHeight - 166f);
-            drawTopLeftText("Time: 0", hudCamera.viewportWidth - 120f, hudCamera.viewportHeight - 12f);
-            drawCenteredText("Game Over", hudCamera.viewportHeight / 2f + 48f);
-            drawCenteredText(resultText, hudCamera.viewportHeight / 2f + 16f);
-            drawCenteredText(
-                String.format("Player %d / Enemy %d", finalPlayerScore, finalEnemyScore),
-                hudCamera.viewportHeight / 2f - 16f
-            );
-            drawCenteredText(
-                String.format("Player %.1f%% / Enemy %.1f%%", finalPlayerPaintRate, finalEnemyPaintRate),
-                hudCamera.viewportHeight / 2f - 48f
-            );
-            drawCenteredText(RETURN_TEXT, hudCamera.viewportHeight / 2f - 80f);
+            drawResultScreen();
         }
 
         spriteBatch.end();
@@ -468,6 +469,30 @@ public class Main3D implements ApplicationListener {
         font.setColor(color);
         font.draw(spriteBatch, glyphLayout, x, y);
         font.setColor(oldR, oldG, oldB, oldA);
+    }
+
+    private void drawCenteredScaledTextWithShadow(String text, float y, Color color, float scale) {
+        float previousScaleX = font.getData().scaleX;
+        float previousScaleY = font.getData().scaleY;
+        font.getData().setScale(scale);
+        drawCenteredTextWithShadow(text, y, color);
+        font.getData().setScale(previousScaleX, previousScaleY);
+    }
+
+    private void drawResultScreen() {
+        float centerY = hudCamera.viewportHeight / 2f;
+        drawCenteredScaledTextWithShadow("Game Over", centerY + 116f, Color.WHITE, 1.2f);
+        drawCenteredScaledTextWithShadow(resultText, centerY + 78f, FEEDBACK_SPLAT_COLOR, 1.45f);
+        drawCenteredText("Paint Result", centerY + 42f);
+        drawCenteredText(String.format("Player Tiles: %d", finalPlayerScore), centerY + 14f);
+        drawCenteredText(String.format("Enemy Tiles: %d", finalEnemyScore), centerY - 10f);
+        drawCenteredText(String.format("Player Paint Rate: %.1f%%", finalPlayerPaintRate), centerY - 38f);
+        drawCenteredText(String.format("Enemy Paint Rate: %.1f%%", finalEnemyPaintRate), centerY - 62f);
+        drawCenteredText(String.format("Player Splats: %d", finalPlayerSplats), centerY - 90f);
+        drawCenteredText(String.format("Enemy Splats: %d", finalEnemySplats), centerY - 114f);
+        drawCenteredText("Weapon: " + finalWeaponName, centerY - 142f);
+        drawCenteredText("Enter: Retry", centerY - 178f);
+        drawCenteredText("R: Return to Title", centerY - 202f);
     }
 
     private void drawCombatShapes() {
@@ -529,6 +554,30 @@ public class Main3D implements ApplicationListener {
         if (player.isSplatted()) {
             shapeRenderer.rect(hudCamera.viewportWidth / 2f - 140f, hudCamera.viewportHeight / 2f - 32f, 280f, 88f);
         }
+        shapeRenderer.end();
+    }
+
+    private void drawResultScreenShapes() {
+        if (flowState != GameFlowState.GAME_OVER) {
+            return;
+        }
+
+        float panelX = (hudCamera.viewportWidth - RESULT_PANEL_WIDTH) / 2f;
+        float panelY = (hudCamera.viewportHeight - RESULT_PANEL_HEIGHT) / 2f - 36f;
+
+        shapeRenderer.setProjectionMatrix(hudCamera.combined);
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        shapeRenderer.setColor(0f, 0f, 0f, 0.58f);
+        shapeRenderer.rect(panelX, panelY, RESULT_PANEL_WIDTH, RESULT_PANEL_HEIGHT);
+        shapeRenderer.setColor(0.1f, 0.14f, 0.18f, 0.82f);
+        shapeRenderer.rect(panelX + 10f, panelY + 10f, RESULT_PANEL_WIDTH - 20f, RESULT_PANEL_HEIGHT - 20f);
+        shapeRenderer.end();
+
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
+        shapeRenderer.setColor(PANEL_BORDER_COLOR);
+        shapeRenderer.rect(panelX, panelY, RESULT_PANEL_WIDTH, RESULT_PANEL_HEIGHT);
+        shapeRenderer.rect(panelX + 10f, panelY + 10f, RESULT_PANEL_WIDTH - 20f, RESULT_PANEL_HEIGHT - 20f);
+        shapeRenderer.line(panelX + 30f, panelY + RESULT_PANEL_HEIGHT - 92f, panelX + RESULT_PANEL_WIDTH - 30f, panelY + RESULT_PANEL_HEIGHT - 92f);
         shapeRenderer.end();
     }
 
@@ -614,6 +663,8 @@ public class Main3D implements ApplicationListener {
         lastCountdownCue = Integer.MIN_VALUE;
         inkEmptySoundCooldownRemaining = 0f;
         setMouseCapture(false);
+        audioManager.setPausedDucked(false);
+        audioManager.playTitleBgm();
         snapCameraToPlayer();
     }
 
@@ -638,6 +689,8 @@ public class Main3D implements ApplicationListener {
         lastCountdownCue = Integer.MIN_VALUE;
         inkEmptySoundCooldownRemaining = 0f;
         setMouseCapture(false);
+        audioManager.setPausedDucked(false);
+        audioManager.playBattleBgm();
         snapCameraToPlayer();
     }
 
@@ -645,11 +698,13 @@ public class Main3D implements ApplicationListener {
         player.setSwimming(false);
         flowState = GameFlowState.PAUSED;
         setMouseCapture(false);
+        audioManager.setPausedDucked(true);
     }
 
     private void resumeGame() {
         flowState = GameFlowState.PLAYING;
         setMouseCapture(true);
+        audioManager.setPausedDucked(false);
     }
 
     private void finishGame() {
@@ -659,13 +714,18 @@ public class Main3D implements ApplicationListener {
         finalTotalTiles = floorGrid.getTotalCellCount();
         finalPlayerPaintRate = floorGrid.getPlayerPaintRatePercent();
         finalEnemyPaintRate = floorGrid.getEnemyPaintRatePercent();
+        finalPlayerSplats = playerSplatCount;
+        finalEnemySplats = enemySplatCount;
+        finalWeaponName = playerWeapon.getName();
         resultText = getResultText(finalPlayerScore, finalEnemyScore);
         remainingTime = 0f;
         player.setSwimming(false);
         flowState = GameFlowState.GAME_OVER;
         clearBullets();
         resetCombatFeedback();
+        audioManager.setPausedDucked(false);
         audioManager.playGameOver();
+        audioManager.playResultBgm();
         setMouseCapture(false);
     }
 
@@ -1047,6 +1107,9 @@ public class Main3D implements ApplicationListener {
         finalTotalTiles = floorGrid != null ? floorGrid.getTotalCellCount() : 0;
         finalPlayerPaintRate = 0f;
         finalEnemyPaintRate = 0f;
+        finalPlayerSplats = 0;
+        finalEnemySplats = 0;
+        finalWeaponName = WeaponConfig3D.BASIC_SHOOTER.getName();
     }
 
     private String getResultText(int playerScore, int enemyScore) {

@@ -35,7 +35,23 @@ For example, `core:clean` removes `build` folder only from the `core` project.
 ## Placeholder sounds
 
 The 3D prototype can use simple placeholder WAV files under `assets/audio`.
-You can regenerate the development sounds with:
+The generator creates both short sound effects and loopable placeholder BGM files:
+
+- `player_shoot.wav`
+- `enemy_shoot.wav`
+- `hit.wav`
+- `player_splatted.wav`
+- `enemy_splatted.wav`
+- `countdown_beep.wav`
+- `countdown_go.wav`
+- `game_over.wav`
+- `weapon_switch.wav`
+- `ink_empty.wav`
+- `title_bgm.wav`
+- `battle_bgm.wav`
+- `result_bgm.wav`
+
+You can regenerate the development audio with:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools/generate_placeholder_sounds.ps1

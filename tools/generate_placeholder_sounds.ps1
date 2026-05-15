@@ -82,6 +82,44 @@ $sounds = @(
             @{ Duration = 0.06; StartHz = 240; EndHz = 200; Wave = "square"; Amp = 0.75 }
         )
     }
+    @{
+        Name = "title_bgm.wav"
+        Events = @(
+            @{ Duration = 0.22; StartHz = 392; EndHz = 392; Wave = "sine"; Amp = 0.40 }
+            @{ Duration = 0.22; StartHz = 523; EndHz = 523; Wave = "sine"; Amp = 0.38 }
+            @{ Duration = 0.22; StartHz = 659; EndHz = 659; Wave = "sine"; Amp = 0.40 }
+            @{ Duration = 0.22; StartHz = 523; EndHz = 523; Wave = "sine"; Amp = 0.38 }
+            @{ Duration = 0.22; StartHz = 440; EndHz = 440; Wave = "sine"; Amp = 0.40 }
+            @{ Duration = 0.22; StartHz = 587; EndHz = 587; Wave = "sine"; Amp = 0.38 }
+            @{ Duration = 0.22; StartHz = 698; EndHz = 698; Wave = "sine"; Amp = 0.40 }
+            @{ Duration = 0.22; StartHz = 587; EndHz = 587; Wave = "sine"; Amp = 0.38 }
+        )
+    }
+    @{
+        Name = "battle_bgm.wav"
+        Events = @(
+            @{ Duration = 0.14; StartHz = 196; EndHz = 196; Wave = "square"; Amp = 0.32 }
+            @{ Duration = 0.14; StartHz = 247; EndHz = 247; Wave = "square"; Amp = 0.30 }
+            @{ Duration = 0.14; StartHz = 294; EndHz = 294; Wave = "square"; Amp = 0.32 }
+            @{ Duration = 0.14; StartHz = 247; EndHz = 247; Wave = "square"; Amp = 0.30 }
+            @{ Duration = 0.14; StartHz = 220; EndHz = 220; Wave = "square"; Amp = 0.32 }
+            @{ Duration = 0.14; StartHz = 277; EndHz = 277; Wave = "square"; Amp = 0.30 }
+            @{ Duration = 0.14; StartHz = 330; EndHz = 330; Wave = "square"; Amp = 0.32 }
+            @{ Duration = 0.14; StartHz = 277; EndHz = 277; Wave = "square"; Amp = 0.30 }
+            @{ Duration = 0.18; StartHz = 196; EndHz = 196; Wave = "sine"; Amp = 0.18 }
+            @{ Duration = 0.18; StartHz = 220; EndHz = 220; Wave = "sine"; Amp = 0.18 }
+        )
+    }
+    @{
+        Name = "result_bgm.wav"
+        Events = @(
+            @{ Duration = 0.28; StartHz = 523; EndHz = 523; Wave = "sine"; Amp = 0.42 }
+            @{ Duration = 0.28; StartHz = 659; EndHz = 659; Wave = "sine"; Amp = 0.40 }
+            @{ Duration = 0.28; StartHz = 784; EndHz = 784; Wave = "sine"; Amp = 0.42 }
+            @{ Duration = 0.34; StartHz = 1046; EndHz = 1046; Wave = "sine"; Amp = 0.44 }
+            @{ Duration = 0.32; StartHz = 784; EndHz = 784; Wave = "sine"; Amp = 0.32 }
+        )
+    }
 )
 
 function Get-WaveValue {
@@ -196,7 +234,7 @@ foreach ($sound in $sounds) {
     Write-WavFile -Path $outputPath -Samples $samples
 }
 
-Write-Host "Generated placeholder sounds:"
+Write-Host "Generated placeholder audio:"
 foreach ($sound in $sounds) {
     Write-Host (" - " + (Join-Path "assets/audio" $sound.Name))
 }

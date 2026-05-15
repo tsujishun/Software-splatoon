@@ -1,6 +1,7 @@
 package io.github.shunsuke.paintgame.threed;
 
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.audio.Music;
 import com.badlogic.gdx.audio.Sound;
 import com.badlogic.gdx.files.FileHandle;
 import com.badlogic.gdx.utils.Disposable;
@@ -19,10 +20,16 @@ import com.badlogic.gdx.utils.Disposable;
  * - assets/audio/game_over.wav
  * - assets/audio/weapon_switch.wav
  * - assets/audio/ink_empty.wav
+ * - assets/audio/title_bgm.wav
+ * - assets/audio/battle_bgm.wav
+ * - assets/audio/result_bgm.wav
  *
  * Missing files are allowed. The game should keep running silently instead of crashing.
  */
 public class AudioManager3D implements Disposable {
+    private static final float MASTER_SFX_VOLUME = 1.0f;
+    private static final float MASTER_BGM_VOLUME = 0.34f;
+    private static final float PAUSED_BGM_VOLUME_MULTIPLIER = 0.55f;
     private static final float SHOOT_VOLUME = 0.42f;
     private static final float HIT_VOLUME = 0.55f;
     private static final float SPLAT_VOLUME = 0.7f;
@@ -41,6 +48,13 @@ public class AudioManager3D implements Disposable {
     private final Sound gameOverSound;
     private final Sound weaponSwitchSound;
     private final Sound inkEmptySound;
+    private final Music titleBgm;
+    private final Music battleBgm;
+    private final Music resultBgm;
+
+    private Music currentBgm;
+    private boolean muted;
+    private boolean pausedDucked;
 
     public AudioManager3D() {
         playerShootSound = loadSound("audio/player_shoot.wav");
@@ -53,6 +67,9 @@ public class AudioManager3D implements Disposable {
         gameOverSound = loadSound("audio/game_over.wav");
         weaponSwitchSound = loadSound("audio/weapon_switch.wav");
         inkEmptySound = loadSound("audio/ink_empty.wav");
+        titleBgm = loadMusic("audio/title_bgm.wav");
+        battleBgm = loadMusic("audio/battle_bgm.wav");
+        resultBgm = loadMusic("audio/result_bgm.wav");
     }
 
     public void playPlayerShoot() {
@@ -95,6 +112,32 @@ public class AudioManager3D implements Disposable {
         play(inkEmptySound, WARNING_VOLUME);
     }
 
+    public void playTitleBgm() {
+        playBgm(titleBgm, true);
+    }
+
+    public void playBattleBgm() {
+        playBgm(battleBgm, true);
+    }
+
+    public void playResultBgm() {
+        playBgm(resultBgm, true);
+    }
+
+    public void setPausedDucked(boolean shouldDuck) {
+        pausedDucked = shouldDuck;
+        applyBgmVolume();
+    }
+
+    public void toggleMute() {
+        muted = !muted;
+        applyBgmVolume();
+    }
+
+    public boolean isMuted() {
+        return muted;
+    }
+
     @Override
     public void dispose() {
         disposeSound(playerShootSound);
@@ -107,6 +150,9 @@ public class AudioManager3D implements Disposable {
         disposeSound(gameOverSound);
         disposeSound(weaponSwitchSound);
         disposeSound(inkEmptySound);
+        disposeMusic(titleBgm);
+        disposeMusic(battleBgm);
+        disposeMusic(resultBgm);
     }
 
     private Sound loadSound(String path) {
@@ -122,16 +168,72 @@ public class AudioManager3D implements Disposable {
     }
 
     private void play(Sound sound, float volume) {
-        if (sound == null) {
+        if (sound == null || muted) {
             return;
         }
 
-        sound.play(volume);
+        sound.play(volume * MASTER_SFX_VOLUME);
     }
 
     private void disposeSound(Sound sound) {
         if (sound != null) {
             sound.dispose();
+        }
+    }
+
+    private Music loadMusic(String path) {
+        try {
+            FileHandle fileHandle = Gdx.files.internal(path);
+            if (!fileHandle.exists()) {
+                return null;
+            }
+            return Gdx.audio.newMusic(fileHandle);
+        } catch (Exception exception) {
+            return null;
+        }
+    }
+
+    private void playBgm(Music music, boolean looping) {
+        if (currentBgm == music) {
+            if (currentBgm != null) {
+                currentBgm.setLooping(looping);
+                applyBgmVolume();
+                if (!currentBgm.isPlaying()) {
+                    currentBgm.play();
+                }
+            }
+            return;
+        }
+
+        if (currentBgm != null) {
+            currentBgm.stop();
+        }
+
+        currentBgm = music;
+        if (currentBgm == null) {
+            return;
+        }
+
+        currentBgm.setLooping(looping);
+        applyBgmVolume();
+        currentBgm.play();
+    }
+
+    private void applyBgmVolume() {
+        if (currentBgm == null) {
+            return;
+        }
+
+        float volume = muted ? 0f : MASTER_BGM_VOLUME;
+        if (pausedDucked) {
+            volume *= PAUSED_BGM_VOLUME_MULTIPLIER;
+        }
+        currentBgm.setVolume(volume);
+    }
+
+    private void disposeMusic(Music music) {
+        if (music != null) {
+            music.dispose();
         }
     }
 }
