@@ -26,10 +26,17 @@ import java.util.Iterator;
  * This keeps the finished 2D prototype intact while we build the 3D version in small steps.
  */
 public class Main3D implements ApplicationListener {
+    private enum TitleMenuScreen {
+        MAIN,
+        WEAPON_SELECT,
+        DIFFICULTY,
+        CONTROLS
+    }
+
     private static final boolean DEBUG_MODE = false;
     private static final String TITLE_TEXT = "Paint Battle 3D Prototype";
-    private static final String TITLE_PROMPT_TEXT = "Press Enter to Start";
-    private static final String STEP_TEXT = "Step 29: Better Result Screen";
+    private static final String TITLE_PROMPT_TEXT = "Use W/S or Up/Down, Enter to Select";
+    private static final String STEP_TEXT = "Step 30: Title Menu Setup";
     private static final String TITLE_CONTROL_MOVE_TEXT = "WASD: Move";
     private static final String TITLE_CONTROL_LOOK_TEXT = "Mouse: Look";
     private static final String TITLE_CONTROL_SHOOT_TEXT = "Space: Shoot";
@@ -39,6 +46,7 @@ public class Main3D implements ApplicationListener {
     private static final String TITLE_CONTROL_RETURN_TEXT = "R: Return to Title";
     private static final String TITLE_CONTROL_PAUSE_TEXT = "Esc: Pause / Release Mouse";
     private static final String TITLE_CONTROL_MUTE_TEXT = "M: Mute";
+    private static final String TITLE_CONTROL_BACK_TEXT = "Esc / Backspace: Back";
     private static final String PLAY_TEXT = "WASD: Move relative to the camera";
     private static final String CAMERA_CONTROL_TEXT = "Move the mouse to control the camera";
     private static final String SHOOT_TEXT = "Space: Shoot in the camera direction";
@@ -111,9 +119,15 @@ public class Main3D implements ApplicationListener {
     private final Vector3 desiredCameraTarget = new Vector3();
 
     private GameFlowState flowState;
+    private TitleMenuScreen titleMenuScreen;
+    private int titleMenuIndex;
+    private int weaponMenuIndex;
+    private int difficultyMenuIndex;
     private float countdownTimer;
     private float remainingTime;
     private WeaponConfig3D playerWeapon;
+    private WeaponConfig3D selectedTitleWeapon;
+    private CpuDifficulty3D selectedCpuDifficulty;
     private float fireCooldownRemaining;
     private float enemyFireCooldownRemaining;
     private float cameraYaw;
@@ -158,9 +172,13 @@ public class Main3D implements ApplicationListener {
         stageObstacles = new StageObstacles3D();
         player = new Player3D();
         enemyCpu = new EnemyCpu3D();
+        selectedTitleWeapon = WeaponConfig3D.BASIC_SHOOTER;
+        selectedCpuDifficulty = CpuDifficulty3D.NORMAL;
+        enemyCpu.setDifficulty(selectedCpuDifficulty);
         enemyCpu.reset(floorGrid);
-        playerWeapon = WeaponConfig3D.BASIC_SHOOTER;
+        playerWeapon = selectedTitleWeapon;
         flowState = GameFlowState.TITLE;
+        resetTitleMenuState();
         countdownTimer = COUNTDOWN_TOTAL_SECONDS;
         remainingTime = GAME_DURATION_SECONDS;
         fireCooldownRemaining = 0f;
@@ -229,6 +247,7 @@ public class Main3D implements ApplicationListener {
         Gdx.gl.glDisable(GL20.GL_DEPTH_TEST);
         hudCamera.update();
         drawCombatShapes();
+        drawTitleMenuShapes();
         drawResultScreenShapes();
         spriteBatch.setProjectionMatrix(hudCamera.combined);
         drawOverlay();
@@ -305,9 +324,7 @@ public class Main3D implements ApplicationListener {
 
     private void updateFlow(float delta) {
         if (flowState == GameFlowState.TITLE) {
-            if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER)) {
-                startCountdown();
-            }
+            handleTitleMenuInput();
             return;
         }
 
@@ -362,22 +379,102 @@ public class Main3D implements ApplicationListener {
         }
     }
 
+    private void handleTitleMenuInput() {
+        if (isTitleBackPressed()) {
+            if (titleMenuScreen != TitleMenuScreen.MAIN) {
+                titleMenuScreen = TitleMenuScreen.MAIN;
+                audioManager.playWeaponSwitch();
+            }
+            return;
+        }
+
+        if (titleMenuScreen == TitleMenuScreen.CONTROLS) {
+            if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER)) {
+                titleMenuScreen = TitleMenuScreen.MAIN;
+                audioManager.playWeaponSwitch();
+            }
+            return;
+        }
+
+        if (titleMenuScreen == TitleMenuScreen.MAIN) {
+            if (isTitleUpPressed()) {
+                titleMenuIndex = wrapMenuIndex(titleMenuIndex - 1, 4);
+                audioManager.playWeaponSwitch();
+            } else if (isTitleDownPressed()) {
+                titleMenuIndex = wrapMenuIndex(titleMenuIndex + 1, 4);
+                audioManager.playWeaponSwitch();
+            }
+
+            if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER)) {
+                openSelectedTitleMenu();
+            }
+            return;
+        }
+
+        if (titleMenuScreen == TitleMenuScreen.WEAPON_SELECT) {
+            if (isTitleUpPressed()) {
+                weaponMenuIndex = wrapMenuIndex(weaponMenuIndex - 1, 3);
+                audioManager.playWeaponSwitch();
+            } else if (isTitleDownPressed()) {
+                weaponMenuIndex = wrapMenuIndex(weaponMenuIndex + 1, 3);
+                audioManager.playWeaponSwitch();
+            }
+
+            if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER)) {
+                selectedTitleWeapon = getWeaponByMenuIndex(weaponMenuIndex);
+                titleMenuScreen = TitleMenuScreen.MAIN;
+                audioManager.playWeaponSwitch();
+            }
+            return;
+        }
+
+        if (titleMenuScreen == TitleMenuScreen.DIFFICULTY) {
+            if (isTitleUpPressed()) {
+                difficultyMenuIndex = wrapMenuIndex(difficultyMenuIndex - 1, CpuDifficulty3D.values().length);
+                audioManager.playWeaponSwitch();
+            } else if (isTitleDownPressed()) {
+                difficultyMenuIndex = wrapMenuIndex(difficultyMenuIndex + 1, CpuDifficulty3D.values().length);
+                audioManager.playWeaponSwitch();
+            }
+
+            if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER)) {
+                selectedCpuDifficulty = CpuDifficulty3D.values()[difficultyMenuIndex];
+                enemyCpu.setDifficulty(selectedCpuDifficulty);
+                titleMenuScreen = TitleMenuScreen.MAIN;
+                audioManager.playWeaponSwitch();
+            }
+        }
+    }
+
+    private void openSelectedTitleMenu() {
+        switch (titleMenuIndex) {
+            case 0:
+                startCountdown();
+                break;
+            case 1:
+                titleMenuScreen = TitleMenuScreen.WEAPON_SELECT;
+                weaponMenuIndex = getWeaponMenuIndex(selectedTitleWeapon);
+                audioManager.playWeaponSwitch();
+                break;
+            case 2:
+                titleMenuScreen = TitleMenuScreen.DIFFICULTY;
+                difficultyMenuIndex = selectedCpuDifficulty.ordinal();
+                audioManager.playWeaponSwitch();
+                break;
+            case 3:
+                titleMenuScreen = TitleMenuScreen.CONTROLS;
+                audioManager.playWeaponSwitch();
+                break;
+            default:
+                break;
+        }
+    }
+
     private void drawOverlay() {
         spriteBatch.begin();
 
         if (flowState == GameFlowState.TITLE) {
-            drawCenteredText(TITLE_TEXT, hudCamera.viewportHeight / 2f + 40f);
-            drawCenteredText(TITLE_PROMPT_TEXT, hudCamera.viewportHeight / 2f + 8f);
-            drawCenteredText(STEP_TEXT, hudCamera.viewportHeight / 2f - 24f);
-            drawCenteredText(TITLE_CONTROL_MOVE_TEXT, hudCamera.viewportHeight / 2f - 64f);
-            drawCenteredText(TITLE_CONTROL_LOOK_TEXT, hudCamera.viewportHeight / 2f - 88f);
-            drawCenteredText(TITLE_CONTROL_SHOOT_TEXT, hudCamera.viewportHeight / 2f - 112f);
-            drawCenteredText(TITLE_CONTROL_WEAPON_TEXT, hudCamera.viewportHeight / 2f - 136f);
-            drawCenteredText(TITLE_CONTROL_JUMP_TEXT, hudCamera.viewportHeight / 2f - 160f);
-            drawCenteredText(TITLE_CONTROL_SWIM_TEXT, hudCamera.viewportHeight / 2f - 184f);
-            drawCenteredText(TITLE_CONTROL_RETURN_TEXT, hudCamera.viewportHeight / 2f - 208f);
-            drawCenteredText(TITLE_CONTROL_PAUSE_TEXT, hudCamera.viewportHeight / 2f - 232f);
-            drawCenteredText(TITLE_CONTROL_MUTE_TEXT, hudCamera.viewportHeight / 2f - 256f);
+            drawTitleMenu();
         } else if (flowState == GameFlowState.COUNTDOWN) {
             drawTopLeftText(STEP_TEXT, 12f, hudCamera.viewportHeight - 12f);
             drawCenteredText(getCountdownText(), hudCamera.viewportHeight / 2f + 12f);
@@ -444,6 +541,55 @@ public class Main3D implements ApplicationListener {
         }
 
         spriteBatch.end();
+    }
+
+    private void drawTitleMenu() {
+        float centerY = hudCamera.viewportHeight / 2f;
+        drawCenteredScaledTextWithShadow(TITLE_TEXT, centerY + 132f, Color.WHITE, 1.15f);
+        drawCenteredText(TITLE_PROMPT_TEXT, centerY + 100f);
+        drawCenteredText(STEP_TEXT, centerY + 74f);
+
+        if (titleMenuScreen == TitleMenuScreen.MAIN) {
+            drawCenteredText(getTitleMenuItemText(0, titleMenuIndex == 0), centerY + 28f);
+            drawCenteredText(getTitleMenuItemText(1, titleMenuIndex == 1), centerY + 2f);
+            drawCenteredText(getTitleMenuItemText(2, titleMenuIndex == 2), centerY - 24f);
+            drawCenteredText(getTitleMenuItemText(3, titleMenuIndex == 3), centerY - 50f);
+            drawCenteredText("Selected Weapon: " + selectedTitleWeapon.getName(), centerY - 98f);
+            drawCenteredText("Difficulty: " + selectedCpuDifficulty.getLabel(), centerY - 124f);
+            drawCenteredText(TITLE_CONTROL_MUTE_TEXT, centerY - 166f);
+            return;
+        }
+
+        if (titleMenuScreen == TitleMenuScreen.WEAPON_SELECT) {
+            drawCenteredScaledTextWithShadow("Weapon Select", centerY + 44f, FEEDBACK_HIT_COLOR, 1.1f);
+            drawCenteredText(getWeaponMenuItemText(0, weaponMenuIndex == 0), centerY + 6f);
+            drawCenteredText(getWeaponMenuItemText(1, weaponMenuIndex == 1), centerY - 20f);
+            drawCenteredText(getWeaponMenuItemText(2, weaponMenuIndex == 2), centerY - 46f);
+            drawCenteredText("Current Start Weapon: " + selectedTitleWeapon.getName(), centerY - 92f);
+            drawCenteredText(TITLE_CONTROL_BACK_TEXT, centerY - 134f);
+            return;
+        }
+
+        if (titleMenuScreen == TitleMenuScreen.DIFFICULTY) {
+            drawCenteredScaledTextWithShadow("Difficulty", centerY + 44f, FEEDBACK_HIT_COLOR, 1.1f);
+            drawCenteredText(getDifficultyMenuItemText(0, difficultyMenuIndex == 0), centerY + 6f);
+            drawCenteredText(getDifficultyMenuItemText(1, difficultyMenuIndex == 1), centerY - 20f);
+            drawCenteredText(getDifficultyMenuItemText(2, difficultyMenuIndex == 2), centerY - 46f);
+            drawCenteredText("Current Difficulty: " + selectedCpuDifficulty.getLabel(), centerY - 92f);
+            drawCenteredText(TITLE_CONTROL_BACK_TEXT, centerY - 134f);
+            return;
+        }
+
+        drawCenteredScaledTextWithShadow("Controls", centerY + 58f, FEEDBACK_HIT_COLOR, 1.1f);
+        drawCenteredText(TITLE_CONTROL_MOVE_TEXT, centerY + 22f);
+        drawCenteredText(TITLE_CONTROL_LOOK_TEXT, centerY - 2f);
+        drawCenteredText(TITLE_CONTROL_SHOOT_TEXT, centerY - 26f);
+        drawCenteredText(TITLE_CONTROL_WEAPON_TEXT, centerY - 50f);
+        drawCenteredText(TITLE_CONTROL_JUMP_TEXT, centerY - 74f);
+        drawCenteredText(TITLE_CONTROL_SWIM_TEXT, centerY - 98f);
+        drawCenteredText(TITLE_CONTROL_PAUSE_TEXT, centerY - 122f);
+        drawCenteredText(TITLE_CONTROL_MUTE_TEXT, centerY - 146f);
+        drawCenteredText(TITLE_CONTROL_BACK_TEXT, centerY - 186f);
     }
 
     private void drawCenteredText(String text, float y) {
@@ -581,6 +727,32 @@ public class Main3D implements ApplicationListener {
         shapeRenderer.end();
     }
 
+    private void drawTitleMenuShapes() {
+        if (flowState != GameFlowState.TITLE) {
+            return;
+        }
+
+        float panelWidth = 520f;
+        float panelHeight = titleMenuScreen == TitleMenuScreen.CONTROLS ? 410f : 340f;
+        float panelX = (hudCamera.viewportWidth - panelWidth) / 2f;
+        float panelY = (hudCamera.viewportHeight - panelHeight) / 2f - 30f;
+
+        shapeRenderer.setProjectionMatrix(hudCamera.combined);
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        shapeRenderer.setColor(0f, 0f, 0f, 0.5f);
+        shapeRenderer.rect(panelX, panelY, panelWidth, panelHeight);
+        shapeRenderer.setColor(0.1f, 0.14f, 0.18f, 0.8f);
+        shapeRenderer.rect(panelX + 10f, panelY + 10f, panelWidth - 20f, panelHeight - 20f);
+        shapeRenderer.end();
+
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
+        shapeRenderer.setColor(PANEL_BORDER_COLOR);
+        shapeRenderer.rect(panelX, panelY, panelWidth, panelHeight);
+        shapeRenderer.rect(panelX + 10f, panelY + 10f, panelWidth - 20f, panelHeight - 20f);
+        shapeRenderer.line(panelX + 30f, panelY + panelHeight - 92f, panelX + panelWidth - 30f, panelY + panelHeight - 92f);
+        shapeRenderer.end();
+    }
+
     private void drawBarFill(float x, float y, float width, float height, float ratio, Color fillColor) {
         float clampedRatio = MathUtils.clamp(ratio, 0f, 1f);
         shapeRenderer.setColor(BAR_BACKGROUND_COLOR);
@@ -645,17 +817,19 @@ public class Main3D implements ApplicationListener {
     private void goToTitleScreen() {
         floorGrid.reset();
         stageObstacles.resetPaint();
+        enemyCpu.setDifficulty(selectedCpuDifficulty);
         player.reset();
         enemyCpu.reset(floorGrid);
         clearBullets();
         flowState = GameFlowState.TITLE;
         countdownTimer = COUNTDOWN_TOTAL_SECONDS;
         remainingTime = GAME_DURATION_SECONDS;
-        playerWeapon = WeaponConfig3D.BASIC_SHOOTER;
+        playerWeapon = selectedTitleWeapon;
         fireCooldownRemaining = 0f;
         enemyFireCooldownRemaining = getEnemyFireInterval();
         currentPaintCellState = FloorGrid3D.CELL_STATE_PLAYER;
         resetMatchResult();
+        resetTitleMenuState();
         playerSplatCount = 0;
         enemySplatCount = 0;
         resetCombatFeedback();
@@ -671,13 +845,14 @@ public class Main3D implements ApplicationListener {
     private void startCountdown() {
         floorGrid.reset();
         stageObstacles.resetPaint();
+        enemyCpu.setDifficulty(selectedCpuDifficulty);
         player.reset();
         enemyCpu.reset(floorGrid);
         clearBullets();
         flowState = GameFlowState.COUNTDOWN;
         countdownTimer = COUNTDOWN_TOTAL_SECONDS;
         remainingTime = GAME_DURATION_SECONDS;
-        playerWeapon = WeaponConfig3D.BASIC_SHOOTER;
+        playerWeapon = selectedTitleWeapon;
         fireCooldownRemaining = 0f;
         enemyFireCooldownRemaining = getEnemyFireInterval();
         currentPaintCellState = FloorGrid3D.CELL_STATE_PLAYER;
@@ -1098,6 +1273,93 @@ public class Main3D implements ApplicationListener {
             return "Swim";
         }
         return "Human";
+    }
+
+    private void resetTitleMenuState() {
+        titleMenuScreen = TitleMenuScreen.MAIN;
+        titleMenuIndex = 0;
+        weaponMenuIndex = getWeaponMenuIndex(selectedTitleWeapon);
+        difficultyMenuIndex = selectedCpuDifficulty.ordinal();
+    }
+
+    private boolean isTitleUpPressed() {
+        return Gdx.input.isKeyJustPressed(Input.Keys.UP) || Gdx.input.isKeyJustPressed(Input.Keys.W);
+    }
+
+    private boolean isTitleDownPressed() {
+        return Gdx.input.isKeyJustPressed(Input.Keys.DOWN) || Gdx.input.isKeyJustPressed(Input.Keys.S);
+    }
+
+    private boolean isTitleBackPressed() {
+        return Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE) || Gdx.input.isKeyJustPressed(Input.Keys.BACKSPACE);
+    }
+
+    private int wrapMenuIndex(int index, int itemCount) {
+        if (itemCount <= 0) {
+            return 0;
+        }
+        return (index % itemCount + itemCount) % itemCount;
+    }
+
+    private String getTitleMenuItemText(int index, boolean selected) {
+        String label;
+        switch (index) {
+            case 0:
+                label = "Start Game";
+                break;
+            case 1:
+                label = "Weapon Select";
+                break;
+            case 2:
+                label = "Difficulty";
+                break;
+            case 3:
+                label = "Controls";
+                break;
+            default:
+                label = "";
+                break;
+        }
+        return selected ? "> " + label + " <" : label;
+    }
+
+    private String getWeaponMenuItemText(int index, boolean selected) {
+        WeaponConfig3D weapon = getWeaponByMenuIndex(index);
+        String label = weapon.getName();
+        if (weapon == selectedTitleWeapon) {
+            label += " (Selected)";
+        }
+        return selected ? "> " + label + " <" : label;
+    }
+
+    private WeaponConfig3D getWeaponByMenuIndex(int index) {
+        switch (index) {
+            case 1:
+                return WeaponConfig3D.SHORT_PAINTER;
+            case 2:
+                return WeaponConfig3D.LONG_SHOOTER;
+            default:
+                return WeaponConfig3D.BASIC_SHOOTER;
+        }
+    }
+
+    private int getWeaponMenuIndex(WeaponConfig3D weapon) {
+        if (weapon == WeaponConfig3D.SHORT_PAINTER) {
+            return 1;
+        }
+        if (weapon == WeaponConfig3D.LONG_SHOOTER) {
+            return 2;
+        }
+        return 0;
+    }
+
+    private String getDifficultyMenuItemText(int index, boolean selected) {
+        CpuDifficulty3D difficulty = CpuDifficulty3D.values()[index];
+        String label = difficulty.getLabel();
+        if (difficulty == selectedCpuDifficulty) {
+            label += " (Selected)";
+        }
+        return selected ? "> " + label + " <" : label;
     }
 
     private void resetMatchResult() {
