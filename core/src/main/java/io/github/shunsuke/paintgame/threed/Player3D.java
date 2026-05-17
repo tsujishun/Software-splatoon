@@ -231,6 +231,15 @@ public class Player3D implements Disposable {
     public void reset() {
         // The stage keeps the lower-left corner open so the player has a safe beginner-friendly spawn.
         spawnPosition.set(SPAWN_X, GROUND_Y, SPAWN_Z);
+        resetFromCurrentSpawn();
+    }
+
+    public void reset(StageConfig3D stageConfig) {
+        spawnPosition.set(stageConfig.getPlayerSpawnX(), GROUND_Y, stageConfig.getPlayerSpawnZ());
+        resetFromCurrentSpawn();
+    }
+
+    private void resetFromCurrentSpawn() {
         position.set(spawnPosition);
         facingDirection.set(0f, 0f, -1f);
         hp = MAX_HP;

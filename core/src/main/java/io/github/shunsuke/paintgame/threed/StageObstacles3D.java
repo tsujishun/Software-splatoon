@@ -25,17 +25,17 @@ public class StageObstacles3D implements Disposable {
 
     private final Array<Obstacle3D> obstacles = new Array<>();
 
-    public StageObstacles3D() {
-        // Keep the center readable while still giving both sides a solid line-of-sight break.
-        addObstacle(0f, 0f, 1.65f, 1.65f, 1.35f, false);
-
-        // Low side platforms are a little wider now so jump routes are easier to read.
-        addObstacle(-2.9f, 0f, 1.45f, 2.7f, 0.82f, true);
-        addObstacle(2.9f, 0f, 1.45f, 2.7f, 0.82f, true);
-
-        // Slightly narrower climb walls leave clearer side lanes for beginner playtests.
-        addObstacle(0f, 3.1f, 2.6f, 1.2f, 1.75f, false);
-        addObstacle(0f, -3.1f, 2.6f, 1.2f, 1.75f, false);
+    public StageObstacles3D(StageConfig3D stageConfig) {
+        for (StageConfig3D.ObstacleSpec obstacleSpec : stageConfig.getObstacleSpecs()) {
+            addObstacle(
+                obstacleSpec.getCenterX(),
+                obstacleSpec.getCenterZ(),
+                obstacleSpec.getWidth(),
+                obstacleSpec.getDepth(),
+                obstacleSpec.getHeight(),
+                obstacleSpec.isStandable()
+            );
+        }
     }
 
     public void render(ModelBatch modelBatch, Environment environment) {

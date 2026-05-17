@@ -29,6 +29,7 @@ public class Main3D implements ApplicationListener {
     private enum TitleMenuScreen {
         MAIN,
         WEAPON_SELECT,
+        STAGE_SELECT,
         DIFFICULTY,
         CONTROLS
     }
@@ -41,6 +42,7 @@ public class Main3D implements ApplicationListener {
     private static final String TITLE_CONTROL_LOOK_TEXT = "Mouse: Look";
     private static final String TITLE_CONTROL_SHOOT_TEXT = "Space: Shoot";
     private static final String TITLE_CONTROL_WEAPON_TEXT = "1 / 2 / 3: Switch Weapon";
+    private static final String TITLE_CONTROL_STAGE_TEXT = "Stage Select: Training / Wide Arena";
     private static final String TITLE_CONTROL_JUMP_TEXT = "J: Jump / Wall Jump";
     private static final String TITLE_CONTROL_SWIM_TEXT = "Shift: Swim on floor / Climb painted walls";
     private static final String TITLE_CONTROL_RETURN_TEXT = "R: Return to Title";
@@ -123,12 +125,15 @@ public class Main3D implements ApplicationListener {
     private TitleMenuScreen titleMenuScreen;
     private int titleMenuIndex;
     private int weaponMenuIndex;
+    private int stageMenuIndex;
     private int difficultyMenuIndex;
     private float countdownTimer;
     private float remainingTime;
     private WeaponConfig3D playerWeapon;
     private WeaponConfig3D selectedTitleWeapon;
+    private StageType3D selectedStageType;
     private CpuDifficulty3D selectedCpuDifficulty;
+    private StageConfig3D currentStageConfig;
     private float fireCooldownRemaining;
     private float enemyFireCooldownRemaining;
     private float cameraYaw;
@@ -169,14 +174,13 @@ public class Main3D implements ApplicationListener {
         environment.set(new ColorAttribute(ColorAttribute.AmbientLight, 0.8f, 0.8f, 0.85f, 1f));
         environment.add(new DirectionalLight().set(0.7f, 0.7f, 0.75f, -1f, -0.8f, -0.3f));
 
-        floorGrid = new FloorGrid3D(12, 12);
-        stageObstacles = new StageObstacles3D();
         player = new Player3D();
         enemyCpu = new EnemyCpu3D();
+        selectedStageType = StageType3D.TRAINING_STAGE;
         selectedTitleWeapon = WeaponConfig3D.BASIC_SHOOTER;
         selectedCpuDifficulty = CpuDifficulty3D.NORMAL;
         enemyCpu.setDifficulty(selectedCpuDifficulty);
-        enemyCpu.reset(floorGrid);
+        rebuildStage(StageConfig3D.forType(selectedStageType));
         playerWeapon = selectedTitleWeapon;
         flowState = GameFlowState.TITLE;
         resetTitleMenuState();
@@ -399,10 +403,10 @@ public class Main3D implements ApplicationListener {
 
         if (titleMenuScreen == TitleMenuScreen.MAIN) {
             if (isTitleUpPressed()) {
-                titleMenuIndex = wrapMenuIndex(titleMenuIndex - 1, 4);
+                titleMenuIndex = wrapMenuIndex(titleMenuIndex - 1, 5);
                 audioManager.playWeaponSwitch();
             } else if (isTitleDownPressed()) {
-                titleMenuIndex = wrapMenuIndex(titleMenuIndex + 1, 4);
+                titleMenuIndex = wrapMenuIndex(titleMenuIndex + 1, 5);
                 audioManager.playWeaponSwitch();
             }
 
@@ -423,6 +427,24 @@ public class Main3D implements ApplicationListener {
 
             if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER)) {
                 selectedTitleWeapon = getWeaponByMenuIndex(weaponMenuIndex);
+                titleMenuScreen = TitleMenuScreen.MAIN;
+                audioManager.playWeaponSwitch();
+            }
+            return;
+        }
+
+        if (titleMenuScreen == TitleMenuScreen.STAGE_SELECT) {
+            if (isTitleUpPressed()) {
+                stageMenuIndex = wrapMenuIndex(stageMenuIndex - 1, StageType3D.values().length);
+                audioManager.playWeaponSwitch();
+            } else if (isTitleDownPressed()) {
+                stageMenuIndex = wrapMenuIndex(stageMenuIndex + 1, StageType3D.values().length);
+                audioManager.playWeaponSwitch();
+            }
+
+            if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER)) {
+                selectedStageType = StageType3D.values()[stageMenuIndex];
+                rebuildStage(StageConfig3D.forType(selectedStageType));
                 titleMenuScreen = TitleMenuScreen.MAIN;
                 audioManager.playWeaponSwitch();
             }
@@ -458,11 +480,16 @@ public class Main3D implements ApplicationListener {
                 audioManager.playWeaponSwitch();
                 break;
             case 2:
+                titleMenuScreen = TitleMenuScreen.STAGE_SELECT;
+                stageMenuIndex = selectedStageType.ordinal();
+                audioManager.playWeaponSwitch();
+                break;
+            case 3:
                 titleMenuScreen = TitleMenuScreen.DIFFICULTY;
                 difficultyMenuIndex = selectedCpuDifficulty.ordinal();
                 audioManager.playWeaponSwitch();
                 break;
-            case 3:
+            case 4:
                 titleMenuScreen = TitleMenuScreen.CONTROLS;
                 audioManager.playWeaponSwitch();
                 break;
@@ -553,13 +580,15 @@ public class Main3D implements ApplicationListener {
         drawCenteredText(STEP_TEXT, centerY + 74f);
 
         if (titleMenuScreen == TitleMenuScreen.MAIN) {
-            drawCenteredText(getTitleMenuItemText(0, titleMenuIndex == 0), centerY + 28f);
-            drawCenteredText(getTitleMenuItemText(1, titleMenuIndex == 1), centerY + 2f);
-            drawCenteredText(getTitleMenuItemText(2, titleMenuIndex == 2), centerY - 24f);
-            drawCenteredText(getTitleMenuItemText(3, titleMenuIndex == 3), centerY - 50f);
-            drawCenteredText("Selected Weapon: " + selectedTitleWeapon.getName(), centerY - 98f);
-            drawCenteredText("Difficulty: " + selectedCpuDifficulty.getLabel(), centerY - 124f);
-            drawCenteredText(TITLE_CONTROL_MUTE_TEXT, centerY - 166f);
+            drawCenteredText(getTitleMenuItemText(0, titleMenuIndex == 0), centerY + 40f);
+            drawCenteredText(getTitleMenuItemText(1, titleMenuIndex == 1), centerY + 14f);
+            drawCenteredText(getTitleMenuItemText(2, titleMenuIndex == 2), centerY - 12f);
+            drawCenteredText(getTitleMenuItemText(3, titleMenuIndex == 3), centerY - 38f);
+            drawCenteredText(getTitleMenuItemText(4, titleMenuIndex == 4), centerY - 64f);
+            drawCenteredText("Selected Weapon: " + selectedTitleWeapon.getName(), centerY - 110f);
+            drawCenteredText("Stage: " + selectedStageType.getDisplayName(), centerY - 136f);
+            drawCenteredText("Difficulty: " + selectedCpuDifficulty.getLabel(), centerY - 162f);
+            drawCenteredText(TITLE_CONTROL_MUTE_TEXT, centerY - 198f);
             return;
         }
 
@@ -570,6 +599,15 @@ public class Main3D implements ApplicationListener {
             drawCenteredText(getWeaponMenuItemText(2, weaponMenuIndex == 2), centerY - 46f);
             drawCenteredText("Current Start Weapon: " + selectedTitleWeapon.getName(), centerY - 92f);
             drawCenteredText(TITLE_CONTROL_BACK_TEXT, centerY - 134f);
+            return;
+        }
+
+        if (titleMenuScreen == TitleMenuScreen.STAGE_SELECT) {
+            drawCenteredScaledTextWithShadow("Stage Select", centerY + 44f, FEEDBACK_HIT_COLOR, 1.1f);
+            drawCenteredText(getStageMenuItemText(0, stageMenuIndex == 0), centerY + 6f);
+            drawCenteredText(getStageMenuItemText(1, stageMenuIndex == 1), centerY - 20f);
+            drawCenteredText("Current Stage: " + selectedStageType.getDisplayName(), centerY - 78f);
+            drawCenteredText(TITLE_CONTROL_BACK_TEXT, centerY - 120f);
             return;
         }
 
@@ -588,11 +626,12 @@ public class Main3D implements ApplicationListener {
         drawCenteredText(TITLE_CONTROL_LOOK_TEXT, centerY - 2f);
         drawCenteredText(TITLE_CONTROL_SHOOT_TEXT, centerY - 26f);
         drawCenteredText(TITLE_CONTROL_WEAPON_TEXT, centerY - 50f);
-        drawCenteredText(TITLE_CONTROL_JUMP_TEXT, centerY - 74f);
-        drawCenteredText(TITLE_CONTROL_SWIM_TEXT, centerY - 98f);
-        drawCenteredText(TITLE_CONTROL_PAUSE_TEXT, centerY - 122f);
-        drawCenteredText(TITLE_CONTROL_MUTE_TEXT, centerY - 146f);
-        drawCenteredText(TITLE_CONTROL_BACK_TEXT, centerY - 186f);
+        drawCenteredText(TITLE_CONTROL_STAGE_TEXT, centerY - 74f);
+        drawCenteredText(TITLE_CONTROL_JUMP_TEXT, centerY - 98f);
+        drawCenteredText(TITLE_CONTROL_SWIM_TEXT, centerY - 122f);
+        drawCenteredText(TITLE_CONTROL_PAUSE_TEXT, centerY - 146f);
+        drawCenteredText(TITLE_CONTROL_MUTE_TEXT, centerY - 170f);
+        drawCenteredText(TITLE_CONTROL_BACK_TEXT, centerY - 210f);
     }
 
     private void drawCenteredText(String text, float y) {
@@ -736,7 +775,7 @@ public class Main3D implements ApplicationListener {
         }
 
         float panelWidth = 520f;
-        float panelHeight = titleMenuScreen == TitleMenuScreen.CONTROLS ? 410f : 340f;
+        float panelHeight = titleMenuScreen == TitleMenuScreen.CONTROLS ? 440f : 370f;
         float panelX = (hudCamera.viewportWidth - panelWidth) / 2f;
         float panelY = (hudCamera.viewportHeight - panelHeight) / 2f - 30f;
 
@@ -818,11 +857,8 @@ public class Main3D implements ApplicationListener {
     }
 
     private void goToTitleScreen() {
-        floorGrid.reset();
-        stageObstacles.resetPaint();
+        rebuildStage(StageConfig3D.forType(selectedStageType));
         enemyCpu.setDifficulty(selectedCpuDifficulty);
-        player.reset();
-        enemyCpu.reset(floorGrid);
         clearBullets();
         flowState = GameFlowState.TITLE;
         countdownTimer = COUNTDOWN_TOTAL_SECONDS;
@@ -846,11 +882,8 @@ public class Main3D implements ApplicationListener {
     }
 
     private void startCountdown() {
-        floorGrid.reset();
-        stageObstacles.resetPaint();
+        rebuildStage(StageConfig3D.forType(selectedStageType));
         enemyCpu.setDifficulty(selectedCpuDifficulty);
-        player.reset();
-        enemyCpu.reset(floorGrid);
         clearBullets();
         flowState = GameFlowState.COUNTDOWN;
         countdownTimer = COUNTDOWN_TOTAL_SECONDS;
@@ -1282,7 +1315,23 @@ public class Main3D implements ApplicationListener {
         titleMenuScreen = TitleMenuScreen.MAIN;
         titleMenuIndex = 0;
         weaponMenuIndex = getWeaponMenuIndex(selectedTitleWeapon);
+        stageMenuIndex = selectedStageType.ordinal();
         difficultyMenuIndex = selectedCpuDifficulty.ordinal();
+    }
+
+    private void rebuildStage(StageConfig3D stageConfig) {
+        if (floorGrid != null) {
+            floorGrid.dispose();
+        }
+        if (stageObstacles != null) {
+            stageObstacles.dispose();
+        }
+
+        currentStageConfig = stageConfig;
+        floorGrid = new FloorGrid3D(stageConfig.getColumns(), stageConfig.getRows());
+        stageObstacles = new StageObstacles3D(stageConfig);
+        player.reset(stageConfig);
+        enemyCpu.reset(floorGrid, stageConfig);
     }
 
     private boolean isTitleUpPressed() {
@@ -1314,14 +1363,26 @@ public class Main3D implements ApplicationListener {
                 label = "Weapon Select";
                 break;
             case 2:
-                label = "Difficulty";
+                label = "Stage Select";
                 break;
             case 3:
+                label = "Difficulty";
+                break;
+            case 4:
                 label = "Controls";
                 break;
             default:
                 label = "";
                 break;
+        }
+        return selected ? "> " + label + " <" : label;
+    }
+
+    private String getStageMenuItemText(int index, boolean selected) {
+        StageType3D stageType = StageType3D.values()[index];
+        String label = stageType.getDisplayName();
+        if (stageType == selectedStageType) {
+            label += " (Selected)";
         }
         return selected ? "> " + label + " <" : label;
     }

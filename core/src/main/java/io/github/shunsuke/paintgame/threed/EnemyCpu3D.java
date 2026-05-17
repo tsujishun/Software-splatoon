@@ -184,6 +184,18 @@ public class EnemyCpu3D implements Disposable {
         updateTransform();
     }
 
+    public void reset(FloorGrid3D floorGrid, StageConfig3D stageConfig) {
+        hp = MAX_HP;
+        splatted = false;
+        respawnTimer = 0f;
+        invincibleTimer = 0f;
+        currentState = EnemyState.PAINT;
+        setSpawnPosition(floorGrid, stageConfig);
+        position.set(spawnPosition);
+        chooseDirectionTowardCenter();
+        updateTransform();
+    }
+
     public int getHp() {
         return hp;
     }
@@ -268,12 +280,11 @@ public class EnemyCpu3D implements Disposable {
 
         respawnTimer = Math.max(0f, respawnTimer - delta);
         if (respawnTimer <= 0f) {
-            respawn(floorGrid);
+            respawn();
         }
     }
 
-    private void respawn(FloorGrid3D floorGrid) {
-        setSpawnPosition(floorGrid);
+    private void respawn() {
         position.set(spawnPosition);
         hp = MAX_HP;
         splatted = false;
@@ -350,6 +361,20 @@ public class EnemyCpu3D implements Disposable {
             MathUtils.clamp(maxX - SPAWN_INSET, minX, maxX),
             radius,
             MathUtils.clamp(maxZ - SPAWN_INSET, minZ, maxZ)
+        );
+    }
+
+    private void setSpawnPosition(FloorGrid3D floorGrid, StageConfig3D stageConfig) {
+        float radius = ENEMY_DIAMETER / 2f;
+        float minX = floorGrid.getMinX() + radius;
+        float maxX = floorGrid.getMaxX() - radius;
+        float minZ = floorGrid.getMinZ() + radius;
+        float maxZ = floorGrid.getMaxZ() - radius;
+
+        spawnPosition.set(
+            MathUtils.clamp(stageConfig.getEnemySpawnX(), minX, maxX),
+            radius,
+            MathUtils.clamp(stageConfig.getEnemySpawnZ(), minZ, maxZ)
         );
     }
 
