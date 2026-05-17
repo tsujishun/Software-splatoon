@@ -37,7 +37,7 @@ public class Main3D implements ApplicationListener {
     private static final boolean DEBUG_MODE = false;
     private static final String TITLE_TEXT = "Paint Battle 3D Prototype";
     private static final String TITLE_PROMPT_TEXT = "Use W/S or Up/Down, Enter to Select";
-    private static final String STEP_TEXT = "Step 31: Balance Tuning";
+    private static final String STEP_TEXT = "Step 33: Minimap";
     private static final String TITLE_CONTROL_MOVE_TEXT = "WASD: Move";
     private static final String TITLE_CONTROL_LOOK_TEXT = "Mouse: Look";
     private static final String TITLE_CONTROL_SHOOT_TEXT = "Space: Shoot";
@@ -76,6 +76,10 @@ public class Main3D implements ApplicationListener {
     private static final float CROSSHAIR_CENTER_RADIUS = 2f;
     private static final float CROSSHAIR_SHADOW_OFFSET = 1f;
     private static final float CROSSHAIR_DOT_RADIUS = 1.5f;
+    private static final float MINIMAP_MARGIN = 18f;
+    private static final float MINIMAP_MAX_SIZE = 180f;
+    private static final float MINIMAP_PANEL_PADDING = 8f;
+    private static final float MINIMAP_MARKER_RADIUS = 4f;
     private static final float STATUS_BAR_WIDTH = 180f;
     private static final float STATUS_BAR_HEIGHT = 14f;
     private static final float STATUS_BAR_MARGIN = 16f;
@@ -92,6 +96,11 @@ public class Main3D implements ApplicationListener {
     private static final Color CLEAR_COLOR = new Color(0.08f, 0.1f, 0.14f, 1f);
     private static final Color PANEL_COLOR = new Color(0f, 0f, 0f, 0.4f);
     private static final Color PANEL_BORDER_COLOR = new Color(1f, 1f, 1f, 0.15f);
+    private static final Color MINIMAP_PANEL_COLOR = new Color(0f, 0f, 0f, 0.55f);
+    private static final Color MINIMAP_BORDER_COLOR = new Color(1f, 1f, 1f, 0.2f);
+    private static final Color MINIMAP_EMPTY_COLOR = new Color(0.22f, 0.24f, 0.3f, 0.92f);
+    private static final Color MINIMAP_PLAYER_COLOR = new Color(0.2f, 0.86f, 1f, 1f);
+    private static final Color MINIMAP_ENEMY_COLOR = new Color(1f, 0.42f, 0.7f, 1f);
     private static final Color PLAYER_HP_BAR_COLOR = new Color(0.22f, 0.95f, 0.38f, 0.95f);
     private static final Color INK_BAR_COLOR = new Color(0.15f, 0.8f, 1f, 0.95f);
     private static final Color ENEMY_HP_BAR_COLOR = new Color(1f, 0.4f, 0.68f, 0.95f);
@@ -252,6 +261,7 @@ public class Main3D implements ApplicationListener {
         Gdx.gl.glDisable(GL20.GL_DEPTH_TEST);
         hudCamera.update();
         drawCombatShapes();
+        drawMinimap();
         drawTitleMenuShapes();
         drawResultScreenShapes();
         spriteBatch.setProjectionMatrix(hudCamera.combined);
@@ -745,6 +755,66 @@ public class Main3D implements ApplicationListener {
         shapeRenderer.end();
     }
 
+    private void drawMinimap() {
+        if (flowState != GameFlowState.PLAYING && flowState != GameFlowState.PAUSED) {
+            return;
+        }
+        if (floorGrid == null || hudCamera == null) {
+            return;
+        }
+
+        int columns = floorGrid.getColumns();
+        int rows = floorGrid.getRows();
+        if (columns <= 0 || rows <= 0) {
+            return;
+        }
+
+        float availableSize = Math.min(
+            MINIMAP_MAX_SIZE,
+            Math.min(hudCamera.viewportWidth * 0.24f, hudCamera.viewportHeight * 0.28f)
+        );
+        float cellSize = availableSize / Math.max(columns, rows);
+        float mapWidth = columns * cellSize;
+        float mapHeight = rows * cellSize;
+        float panelWidth = availableSize + MINIMAP_PANEL_PADDING * 2f;
+        float panelHeight = availableSize + MINIMAP_PANEL_PADDING * 2f;
+        float panelX = hudCamera.viewportWidth - panelWidth - MINIMAP_MARGIN;
+        float panelY = MINIMAP_MARGIN;
+        float mapX = panelX + MINIMAP_PANEL_PADDING + (availableSize - mapWidth) / 2f;
+        float mapY = panelY + MINIMAP_PANEL_PADDING + (availableSize - mapHeight) / 2f;
+
+        shapeRenderer.setProjectionMatrix(hudCamera.combined);
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        shapeRenderer.setColor(MINIMAP_PANEL_COLOR);
+        shapeRenderer.rect(panelX, panelY, panelWidth, panelHeight);
+
+        for (int row = 0; row < rows; row++) {
+            for (int column = 0; column < columns; column++) {
+                shapeRenderer.setColor(getMinimapCellColor(floorGrid.getCellState(row, column)));
+                shapeRenderer.rect(
+                    mapX + column * cellSize,
+                    mapY + row * cellSize,
+                    cellSize + 0.5f,
+                    cellSize + 0.5f
+                );
+            }
+        }
+
+        if (!player.isSplatted()) {
+            drawMinimapMarker(player.getPosition(), mapX, mapY, mapWidth, mapHeight, MINIMAP_PLAYER_COLOR);
+        }
+        if (!enemyCpu.isSplatted()) {
+            drawMinimapMarker(enemyCpu.getPosition(), mapX, mapY, mapWidth, mapHeight, MINIMAP_ENEMY_COLOR);
+        }
+        shapeRenderer.end();
+
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
+        shapeRenderer.setColor(MINIMAP_BORDER_COLOR);
+        shapeRenderer.rect(panelX, panelY, panelWidth, panelHeight);
+        shapeRenderer.rect(mapX, mapY, mapWidth, mapHeight);
+        shapeRenderer.end();
+    }
+
     private void drawResultScreenShapes() {
         if (flowState != GameFlowState.GAME_OVER) {
             return;
@@ -801,6 +871,35 @@ public class Main3D implements ApplicationListener {
         shapeRenderer.rect(x, y, width, height);
         shapeRenderer.setColor(fillColor);
         shapeRenderer.rect(x, y, width * clampedRatio, height);
+    }
+
+    private void drawMinimapMarker(Vector3 actorPosition, float mapX, float mapY, float mapWidth, float mapHeight, Color markerColor) {
+        float worldWidth = floorGrid.getWorldWidth();
+        float worldDepth = floorGrid.getWorldDepth();
+        if (worldWidth <= 0f || worldDepth <= 0f) {
+            return;
+        }
+
+        float normalizedX = MathUtils.clamp((actorPosition.x - floorGrid.getMinX()) / worldWidth, 0f, 1f);
+        float normalizedZ = MathUtils.clamp((actorPosition.z - floorGrid.getMinZ()) / worldDepth, 0f, 1f);
+        float markerX = mapX + normalizedX * mapWidth;
+        float markerY = mapY + normalizedZ * mapHeight;
+
+        shapeRenderer.setColor(0f, 0f, 0f, 0.85f);
+        shapeRenderer.circle(markerX, markerY, MINIMAP_MARKER_RADIUS + 1.5f);
+        shapeRenderer.setColor(markerColor);
+        shapeRenderer.circle(markerX, markerY, MINIMAP_MARKER_RADIUS);
+    }
+
+    private Color getMinimapCellColor(int cellState) {
+        if (cellState == FloorGrid3D.CELL_STATE_PLAYER) {
+            return MINIMAP_PLAYER_COLOR;
+        }
+        if (cellState == FloorGrid3D.CELL_STATE_ENEMY) {
+            return MINIMAP_ENEMY_COLOR;
+        }
+
+        return MINIMAP_EMPTY_COLOR;
     }
 
     private void drawCrosshair() {

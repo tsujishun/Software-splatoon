@@ -159,6 +159,14 @@ public class FloorGrid3D implements Disposable {
         return rows * columns;
     }
 
+    public int getColumns() {
+        return columns;
+    }
+
+    public int getRows() {
+        return rows;
+    }
+
     public float getPaintRatePercent() {
         int totalCellCount = getTotalCellCount();
         if (totalCellCount <= 0) {
@@ -193,6 +201,14 @@ public class FloorGrid3D implements Disposable {
 
         int column = MathUtils.clamp((int) ((worldX - minX) / TILE_SIZE), 0, columns - 1);
         int row = MathUtils.clamp((int) ((worldZ - minZ) / TILE_SIZE), 0, rows - 1);
+        return cellStates[row][column];
+    }
+
+    public int getCellState(int row, int column) {
+        if (row < 0 || row >= rows || column < 0 || column >= columns) {
+            return CELL_STATE_EMPTY;
+        }
+
         return cellStates[row][column];
     }
 
