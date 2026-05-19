@@ -756,7 +756,7 @@ public class Main3D implements ApplicationListener {
     }
 
     private void drawMinimap() {
-        if (flowState != GameFlowState.PLAYING && flowState != GameFlowState.PAUSED) {
+        if (flowState != GameFlowState.PLAYING) {
             return;
         }
         if (floorGrid == null || hudCamera == null) {
@@ -958,24 +958,9 @@ public class Main3D implements ApplicationListener {
     private void goToTitleScreen() {
         rebuildStage(StageConfig3D.forType(selectedStageType));
         enemyCpu.setDifficulty(selectedCpuDifficulty);
-        clearBullets();
         flowState = GameFlowState.TITLE;
-        countdownTimer = COUNTDOWN_TOTAL_SECONDS;
-        remainingTime = GAME_DURATION_SECONDS;
-        playerWeapon = selectedTitleWeapon;
-        fireCooldownRemaining = 0f;
-        enemyFireCooldownRemaining = getEnemyFireInterval();
-        currentPaintCellState = FloorGrid3D.CELL_STATE_PLAYER;
-        resetMatchResult();
+        resetRoundState();
         resetTitleMenuState();
-        playerSplatCount = 0;
-        enemySplatCount = 0;
-        resetCombatFeedback();
-        resetCameraAngles();
-        lastCountdownCue = Integer.MIN_VALUE;
-        inkEmptySoundCooldownRemaining = 0f;
-        setMouseCapture(false);
-        audioManager.setPausedDucked(false);
         audioManager.playTitleBgm();
         snapCameraToPlayer();
     }
@@ -983,8 +968,14 @@ public class Main3D implements ApplicationListener {
     private void startCountdown() {
         rebuildStage(StageConfig3D.forType(selectedStageType));
         enemyCpu.setDifficulty(selectedCpuDifficulty);
-        clearBullets();
         flowState = GameFlowState.COUNTDOWN;
+        resetRoundState();
+        audioManager.playBattleBgm();
+        snapCameraToPlayer();
+    }
+
+    private void resetRoundState() {
+        clearBullets();
         countdownTimer = COUNTDOWN_TOTAL_SECONDS;
         remainingTime = GAME_DURATION_SECONDS;
         playerWeapon = selectedTitleWeapon;
@@ -1000,8 +991,6 @@ public class Main3D implements ApplicationListener {
         inkEmptySoundCooldownRemaining = 0f;
         setMouseCapture(false);
         audioManager.setPausedDucked(false);
-        audioManager.playBattleBgm();
-        snapCameraToPlayer();
     }
 
     private void pauseGame() {
@@ -1135,7 +1124,9 @@ public class Main3D implements ApplicationListener {
             return;
         }
 
+        // Treat the currently equipped weapon as the next retry/title default too.
         playerWeapon = newWeapon;
+        selectedTitleWeapon = newWeapon;
         fireCooldownRemaining = Math.min(fireCooldownRemaining, playerWeapon.getFireInterval());
         audioManager.playWeaponSwitch();
     }
