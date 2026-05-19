@@ -8,6 +8,7 @@ public class WeaponConfig3D {
     // Standard all-rounder for learning the prototype.
     public static final WeaponConfig3D BASIC_SHOOTER = new WeaponConfig3D(
         "Basic Shooter",
+        "Balanced",
         8.2f,
         9.2f,
         0.34f,
@@ -17,6 +18,7 @@ public class WeaponConfig3D {
     // Short range, wide paint, and fast output. It spends ink quickly if you mash it.
     public static final WeaponConfig3D SHORT_PAINTER = new WeaponConfig3D(
         "Short Painter",
+        "Close / Paint",
         5.2f,
         7.6f,
         0.56f,
@@ -26,6 +28,7 @@ public class WeaponConfig3D {
     // Longer reach and faster bullets, but slower firing and a tighter paint spread.
     public static final WeaponConfig3D LONG_SHOOTER = new WeaponConfig3D(
         "Long Shooter",
+        "Long Range",
         12.4f,
         12.0f,
         0.22f,
@@ -34,6 +37,7 @@ public class WeaponConfig3D {
     );
     public static final WeaponConfig3D ENEMY_SHOOTER = new WeaponConfig3D(
         "Enemy Shooter",
+        "CPU Standard",
         7.1f,
         8.4f,
         0.32f,
@@ -42,14 +46,16 @@ public class WeaponConfig3D {
     );
 
     private final String name;
+    private final String roleLabel;
     private final float range;
     private final float bulletSpeed;
     private final float paintRadius;
     private final float fireInterval;
     private final float inkCost;
 
-    public WeaponConfig3D(String name, float range, float bulletSpeed, float paintRadius, float fireInterval, float inkCost) {
+    public WeaponConfig3D(String name, String roleLabel, float range, float bulletSpeed, float paintRadius, float fireInterval, float inkCost) {
         this.name = name;
+        this.roleLabel = roleLabel;
         this.range = range;
         this.bulletSpeed = bulletSpeed;
         this.paintRadius = paintRadius;
@@ -59,6 +65,10 @@ public class WeaponConfig3D {
 
     public String getName() {
         return name;
+    }
+
+    public String getRoleLabel() {
+        return roleLabel;
     }
 
     public float getRange() {

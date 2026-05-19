@@ -18,9 +18,18 @@ import com.badlogic.gdx.utils.Disposable;
  * Some blocks are tall walls, while some are low enough to be used as jump platforms.
  */
 public class StageObstacles3D implements Disposable {
-    private static final Color OBSTACLE_COLOR = new Color(0.45f, 0.52f, 0.6f, 1f);
-    private static final Color PLAYER_PAINTED_OBSTACLE_COLOR = new Color(0.2f, 0.78f, 0.98f, 1f);
-    private static final Color ENEMY_PAINTED_OBSTACLE_COLOR = new Color(0.98f, 0.38f, 0.62f, 1f);
+    private static final float TOP_PLATE_HEIGHT = 0.05f;
+    private static final float TOP_PLATE_INSET = 0.14f;
+    private static final float CLIMB_HINT_HEIGHT = 0.3f;
+    private static final float CLIMB_HINT_WIDTH = 0.16f;
+    private static final float CLIMB_HINT_Y_OFFSET = 0.22f;
+    private static final Color OBSTACLE_COLOR = new Color(0.34f, 0.4f, 0.48f, 1f);
+    private static final Color PLATFORM_TOP_COLOR = new Color(0.68f, 0.72f, 0.8f, 1f);
+    private static final Color PLAYER_PAINTED_OBSTACLE_COLOR = new Color(0.12f, 0.78f, 1f, 1f);
+    private static final Color PLAYER_PAINTED_TOP_COLOR = new Color(0.62f, 0.94f, 1f, 1f);
+    private static final Color ENEMY_PAINTED_OBSTACLE_COLOR = new Color(0.98f, 0.35f, 0.62f, 1f);
+    private static final Color ENEMY_PAINTED_TOP_COLOR = new Color(1f, 0.76f, 0.86f, 1f);
+    private static final Color CLIMB_HINT_COLOR = new Color(0.92f, 0.98f, 1f, 0.95f);
     private static final float PLATFORM_HEIGHT_EPSILON = 0.04f;
 
     private final Array<Obstacle3D> obstacles = new Array<>();
@@ -41,6 +50,12 @@ public class StageObstacles3D implements Disposable {
     public void render(ModelBatch modelBatch, Environment environment) {
         for (Obstacle3D obstacle : obstacles) {
             modelBatch.render(obstacle.instance, environment);
+            if (obstacle.topPlateInstance != null) {
+                modelBatch.render(obstacle.topPlateInstance, environment);
+            }
+            if (shouldRenderClimbHint(obstacle)) {
+                modelBatch.render(obstacle.climbHintInstance, environment);
+            }
         }
     }
 
@@ -200,6 +215,12 @@ public class StageObstacles3D implements Disposable {
     public void dispose() {
         for (Obstacle3D obstacle : obstacles) {
             obstacle.model.dispose();
+            if (obstacle.topPlateModel != null) {
+                obstacle.topPlateModel.dispose();
+            }
+            if (obstacle.climbHintModel != null) {
+                obstacle.climbHintModel.dispose();
+            }
         }
     }
 
@@ -215,11 +236,43 @@ public class StageObstacles3D implements Disposable {
         ModelInstance instance = new ModelInstance(model);
         instance.transform.setToTranslation(centerX, height / 2f, centerZ);
 
+        Model topPlateModel = null;
+        ModelInstance topPlateInstance = null;
+        if (standable) {
+            topPlateModel = modelBuilder.createBox(
+                Math.max(0.18f, width - TOP_PLATE_INSET),
+                TOP_PLATE_HEIGHT,
+                Math.max(0.18f, depth - TOP_PLATE_INSET),
+                new Material(ColorAttribute.createDiffuse(PLATFORM_TOP_COLOR)),
+                Usage.Position | Usage.Normal
+            );
+            topPlateInstance = new ModelInstance(topPlateModel);
+            topPlateInstance.transform.setToTranslation(centerX, height + TOP_PLATE_HEIGHT / 2f, centerZ);
+        }
+
+        Model climbHintModel = null;
+        ModelInstance climbHintInstance = null;
+        if (!standable) {
+            climbHintModel = modelBuilder.createBox(
+                CLIMB_HINT_WIDTH,
+                CLIMB_HINT_HEIGHT,
+                CLIMB_HINT_WIDTH,
+                new Material(ColorAttribute.createDiffuse(CLIMB_HINT_COLOR)),
+                Usage.Position | Usage.Normal
+            );
+            climbHintInstance = new ModelInstance(climbHintModel);
+            climbHintInstance.transform.setToTranslation(centerX, height + CLIMB_HINT_Y_OFFSET, centerZ);
+        }
+
         float halfWidth = width / 2f;
         float halfDepth = depth / 2f;
         obstacles.add(new Obstacle3D(
             model,
             instance,
+            topPlateModel,
+            topPlateInstance,
+            climbHintModel,
+            climbHintInstance,
             centerX - halfWidth,
             centerX + halfWidth,
             centerZ - halfDepth,
@@ -230,10 +283,16 @@ public class StageObstacles3D implements Disposable {
     }
 
     private void updateObstacleColor(Obstacle3D obstacle) {
-        obstacle.instance.materials.get(0).set(ColorAttribute.createDiffuse(getObstacleColor(obstacle.paintCellState)));
+        obstacle.instance.materials.get(0).set(ColorAttribute.createDiffuse(getObstacleBodyColor(obstacle.paintCellState)));
+        if (obstacle.topPlateInstance != null) {
+            obstacle.topPlateInstance.materials.get(0).set(ColorAttribute.createDiffuse(getObstacleTopColor(obstacle.paintCellState)));
+        }
+        if (obstacle.climbHintInstance != null) {
+            obstacle.climbHintInstance.materials.get(0).set(ColorAttribute.createDiffuse(getClimbHintColor(obstacle.paintCellState)));
+        }
     }
 
-    private Color getObstacleColor(int paintCellState) {
+    private Color getObstacleBodyColor(int paintCellState) {
         if (paintCellState == FloorGrid3D.CELL_STATE_PLAYER) {
             return PLAYER_PAINTED_OBSTACLE_COLOR;
         }
@@ -243,8 +302,29 @@ public class StageObstacles3D implements Disposable {
         return OBSTACLE_COLOR;
     }
 
+    private Color getObstacleTopColor(int paintCellState) {
+        if (paintCellState == FloorGrid3D.CELL_STATE_PLAYER) {
+            return PLAYER_PAINTED_TOP_COLOR;
+        }
+        if (paintCellState == FloorGrid3D.CELL_STATE_ENEMY) {
+            return ENEMY_PAINTED_TOP_COLOR;
+        }
+        return PLATFORM_TOP_COLOR;
+    }
+
+    private Color getClimbHintColor(int paintCellState) {
+        if (paintCellState == FloorGrid3D.CELL_STATE_PLAYER) {
+            return CLIMB_HINT_COLOR;
+        }
+        return OBSTACLE_COLOR;
+    }
+
     private boolean isWalkableForPlayer(Obstacle3D obstacle) {
         return obstacle.standable || obstacle.paintCellState == FloorGrid3D.CELL_STATE_PLAYER;
+    }
+
+    private boolean shouldRenderClimbHint(Obstacle3D obstacle) {
+        return obstacle.climbHintInstance != null && obstacle.paintCellState == FloorGrid3D.CELL_STATE_PLAYER;
     }
 
     private boolean overlapsCircle(Obstacle3D obstacle, float centerX, float centerZ, float radius) {
@@ -274,6 +354,10 @@ public class StageObstacles3D implements Disposable {
     private static class Obstacle3D {
         private final Model model;
         private final ModelInstance instance;
+        private final Model topPlateModel;
+        private final ModelInstance topPlateInstance;
+        private final Model climbHintModel;
+        private final ModelInstance climbHintInstance;
         private final float minX;
         private final float maxX;
         private final float minZ;
@@ -285,6 +369,10 @@ public class StageObstacles3D implements Disposable {
         private Obstacle3D(
             Model model,
             ModelInstance instance,
+            Model topPlateModel,
+            ModelInstance topPlateInstance,
+            Model climbHintModel,
+            ModelInstance climbHintInstance,
             float minX,
             float maxX,
             float minZ,
@@ -294,6 +382,10 @@ public class StageObstacles3D implements Disposable {
         ) {
             this.model = model;
             this.instance = instance;
+            this.topPlateModel = topPlateModel;
+            this.topPlateInstance = topPlateInstance;
+            this.climbHintModel = climbHintModel;
+            this.climbHintInstance = climbHintInstance;
             this.minX = minX;
             this.maxX = maxX;
             this.minZ = minZ;

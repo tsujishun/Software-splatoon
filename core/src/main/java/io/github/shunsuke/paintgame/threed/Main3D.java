@@ -37,7 +37,7 @@ public class Main3D implements ApplicationListener {
     private static final boolean DEBUG_MODE = false;
     private static final String TITLE_TEXT = "Paint Battle 3D Prototype";
     private static final String TITLE_PROMPT_TEXT = "Use W/S or Up/Down, Enter to Select";
-    private static final String STEP_TEXT = "Step 33: Minimap";
+    private static final String STEP_TEXT = "Step 36: Better Visibility";
     private static final String TITLE_CONTROL_MOVE_TEXT = "WASD: Move";
     private static final String TITLE_CONTROL_LOOK_TEXT = "Mouse: Look";
     private static final String TITLE_CONTROL_SHOOT_TEXT = "Space: Shoot";
@@ -76,6 +76,14 @@ public class Main3D implements ApplicationListener {
     private static final float CROSSHAIR_CENTER_RADIUS = 2f;
     private static final float CROSSHAIR_SHADOW_OFFSET = 1f;
     private static final float CROSSHAIR_DOT_RADIUS = 1.5f;
+    private static final float WEAPON_PANEL_MARGIN = 18f;
+    private static final float WEAPON_PANEL_WIDTH = 126f;
+    private static final float WEAPON_PANEL_HEIGHT = 46f;
+    private static final float WEAPON_PANEL_GAP = 10f;
+    private static final float TEAM_MARKER_RADIUS = 9f;
+    private static final float TEAM_MARKER_Y_OFFSET = 0.95f;
+    private static final float MINIMAP_DIRECTION_LENGTH = 7f;
+    private static final float MINIMAP_TRIANGLE_SIZE = 5f;
     private static final float MINIMAP_MARGIN = 18f;
     private static final float MINIMAP_MAX_SIZE = 180f;
     private static final float MINIMAP_PANEL_PADDING = 8f;
@@ -96,6 +104,12 @@ public class Main3D implements ApplicationListener {
     private static final Color CLEAR_COLOR = new Color(0.08f, 0.1f, 0.14f, 1f);
     private static final Color PANEL_COLOR = new Color(0f, 0f, 0f, 0.4f);
     private static final Color PANEL_BORDER_COLOR = new Color(1f, 1f, 1f, 0.15f);
+    private static final Color WEAPON_SLOT_COLOR = new Color(0f, 0f, 0f, 0.5f);
+    private static final Color WEAPON_SLOT_ACTIVE_COLOR = new Color(0.12f, 0.18f, 0.26f, 0.88f);
+    private static final Color WEAPON_SLOT_ACTIVE_BORDER_COLOR = new Color(0.55f, 0.9f, 1f, 0.92f);
+    private static final Color PLAYER_TEAM_MARKER_COLOR = new Color(0.18f, 0.88f, 1f, 0.95f);
+    private static final Color ENEMY_TEAM_MARKER_COLOR = new Color(1f, 0.42f, 0.72f, 0.95f);
+    private static final Color TEAM_MARKER_SHADOW_COLOR = new Color(0f, 0f, 0f, 0.72f);
     private static final Color MINIMAP_PANEL_COLOR = new Color(0f, 0f, 0f, 0.55f);
     private static final Color MINIMAP_BORDER_COLOR = new Color(1f, 1f, 1f, 0.2f);
     private static final Color MINIMAP_EMPTY_COLOR = new Color(0.22f, 0.24f, 0.3f, 0.92f);
@@ -129,6 +143,9 @@ public class Main3D implements ApplicationListener {
     private final Vector3 cameraMoveRight = new Vector3();
     private final Vector3 desiredCameraPosition = new Vector3();
     private final Vector3 desiredCameraTarget = new Vector3();
+    private final Vector3 projectedPlayerMarker = new Vector3();
+    private final Vector3 projectedEnemyMarker = new Vector3();
+    private final Vector3 minimapFacingDirection = new Vector3();
 
     private GameFlowState flowState;
     private TitleMenuScreen titleMenuScreen;
@@ -261,6 +278,7 @@ public class Main3D implements ApplicationListener {
         Gdx.gl.glDisable(GL20.GL_DEPTH_TEST);
         hudCamera.update();
         drawCombatShapes();
+        drawTeamMarkers();
         drawMinimap();
         drawTitleMenuShapes();
         drawResultScreenShapes();
@@ -524,7 +542,7 @@ public class Main3D implements ApplicationListener {
             drawTopLeftText(String.format("Ink %.0f / %.0f", player.getInkAmount(), Player3D.MAX_INK_AMOUNT), 24f, hudCamera.viewportHeight - 68f);
             drawTopLeftText(String.format("Enemy HP %d / %d", enemyCpu.getHp(), EnemyCpu3D.MAX_HP), hudCamera.viewportWidth - 190f, hudCamera.viewportHeight - 42f);
             drawCenteredText(String.format("Time %d", (int) Math.ceil(remainingTime)), hudCamera.viewportHeight - 18f);
-            drawTopLeftText("Weapon: " + playerWeapon.getName(), 12f, hudCamera.viewportHeight - 90f);
+            drawTopLeftText("Weapon: " + playerWeapon.getName() + " - " + playerWeapon.getRoleLabel(), 12f, hudCamera.viewportHeight - 90f);
             drawTopLeftText(
                 "Mode: " + getPlayerModeLabel() + "   Ground: " + getGroundStateLabel(player.getPosition()),
                 12f,
@@ -541,7 +559,7 @@ public class Main3D implements ApplicationListener {
                 hudCamera.viewportHeight - 162f
             );
             drawTopLeftText(String.format("Splats P / E: %d / %d", playerSplatCount, enemySplatCount), 12f, hudCamera.viewportHeight - 184f);
-            drawTopLeftText("J: Jump / Wall Jump   Shift: Swim / Climb   1 / 2 / 3: Weapon", 12f, hudCamera.viewportHeight - 206f);
+            drawTopLeftText("J: Jump / Wall Jump   Shift: Swim / Climb", 12f, hudCamera.viewportHeight - 206f);
             drawTopLeftText("Esc: Pause   M: Mute   R: Title", 12f, hudCamera.viewportHeight - 228f);
             if (DEBUG_MODE) {
                 drawTopLeftText(DEBUG_PAINT_TEXT, 12f, hudCamera.viewportHeight - 252f);
@@ -549,6 +567,8 @@ public class Main3D implements ApplicationListener {
                 drawTopLeftText("Enemy AI: " + enemyCpu.getCurrentState(), 12f, hudCamera.viewportHeight - 296f);
                 drawTopLeftText("Enemy Weapon: " + enemyCpu.getWeaponConfig().getName(), 12f, hudCamera.viewportHeight - 318f);
             }
+
+            drawWeaponHudText();
 
             if (feedbackMessageTimer > 0f && feedbackMessageText != null && !feedbackMessageText.isEmpty()) {
                 drawCenteredTextWithShadow(feedbackMessageText, hudCamera.viewportHeight / 2f + 76f, feedbackMessageColor);
@@ -654,6 +674,16 @@ public class Main3D implements ApplicationListener {
         font.draw(spriteBatch, text, x, y);
     }
 
+    private void drawHudText(String text, float x, float y, Color color) {
+        float oldR = font.getColor().r;
+        float oldG = font.getColor().g;
+        float oldB = font.getColor().b;
+        float oldA = font.getColor().a;
+        font.setColor(color);
+        font.draw(spriteBatch, text, x, y);
+        font.setColor(oldR, oldG, oldB, oldA);
+    }
+
     private void drawCenteredTextWithShadow(String text, float y, Color color) {
         glyphLayout.setText(font, text);
         float x = (hudCamera.viewportWidth - glyphLayout.width) / 2f;
@@ -707,6 +737,7 @@ public class Main3D implements ApplicationListener {
         float timePanelWidth = 110f;
         float timePanelX = (hudCamera.viewportWidth - timePanelWidth) / 2f;
         float timePanelY = hudCamera.viewportHeight - 44f;
+        float weaponPanelY = 18f;
 
         shapeRenderer.setProjectionMatrix(hudCamera.combined);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
@@ -722,6 +753,7 @@ public class Main3D implements ApplicationListener {
         shapeRenderer.rect(inkX - 8f, inkY - 6f, STATUS_BAR_WIDTH + 16f, STATUS_PANEL_HEIGHT);
         shapeRenderer.rect(enemyHpX - 8f, enemyHpY - 6f, STATUS_BAR_WIDTH + 16f, STATUS_PANEL_HEIGHT);
         shapeRenderer.rect(timePanelX, timePanelY, timePanelWidth, STATUS_PANEL_HEIGHT);
+        drawWeaponSlotPanels(weaponPanelY);
 
         if (feedbackMessageTimer > 0f && feedbackMessageText != null && !feedbackMessageText.isEmpty()) {
             shapeRenderer.rect(hudCamera.viewportWidth / 2f - 112f, hudCamera.viewportHeight / 2f + 52f, 224f, 34f);
@@ -746,12 +778,31 @@ public class Main3D implements ApplicationListener {
         shapeRenderer.rect(inkX - 8f, inkY - 6f, STATUS_BAR_WIDTH + 16f, STATUS_PANEL_HEIGHT);
         shapeRenderer.rect(enemyHpX - 8f, enemyHpY - 6f, STATUS_BAR_WIDTH + 16f, STATUS_PANEL_HEIGHT);
         shapeRenderer.rect(timePanelX, timePanelY, timePanelWidth, STATUS_PANEL_HEIGHT);
+        drawWeaponSlotBorders(weaponPanelY);
         if (feedbackMessageTimer > 0f && feedbackMessageText != null && !feedbackMessageText.isEmpty()) {
             shapeRenderer.rect(hudCamera.viewportWidth / 2f - 112f, hudCamera.viewportHeight / 2f + 52f, 224f, 34f);
         }
         if (player.isSplatted()) {
             shapeRenderer.rect(hudCamera.viewportWidth / 2f - 140f, hudCamera.viewportHeight / 2f - 32f, 280f, 88f);
         }
+        shapeRenderer.end();
+    }
+
+    private void drawTeamMarkers() {
+        if (flowState != GameFlowState.PLAYING) {
+            return;
+        }
+
+        shapeRenderer.setProjectionMatrix(hudCamera.combined);
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+
+        if (!player.isSplatted()) {
+            drawProjectedTeamMarker(projectedPlayerMarker, player.getPosition(), player.getFacingDirection(), PLAYER_TEAM_MARKER_COLOR, player.isInvincible());
+        }
+        if (!enemyCpu.isSplatted()) {
+            drawProjectedTeamMarker(projectedEnemyMarker, enemyCpu.getPosition(), enemyCpu.getFacingDirection(), ENEMY_TEAM_MARKER_COLOR, enemyCpu.isInvincible());
+        }
+
         shapeRenderer.end();
     }
 
@@ -801,10 +852,10 @@ public class Main3D implements ApplicationListener {
         }
 
         if (!player.isSplatted()) {
-            drawMinimapMarker(player.getPosition(), mapX, mapY, mapWidth, mapHeight, MINIMAP_PLAYER_COLOR);
+            drawMinimapMarker(player.getPosition(), player.getFacingDirection(), mapX, mapY, mapWidth, mapHeight, MINIMAP_PLAYER_COLOR);
         }
         if (!enemyCpu.isSplatted()) {
-            drawMinimapMarker(enemyCpu.getPosition(), mapX, mapY, mapWidth, mapHeight, MINIMAP_ENEMY_COLOR);
+            drawMinimapMarker(enemyCpu.getPosition(), enemyCpu.getFacingDirection(), mapX, mapY, mapWidth, mapHeight, MINIMAP_ENEMY_COLOR);
         }
         shapeRenderer.end();
 
@@ -873,7 +924,93 @@ public class Main3D implements ApplicationListener {
         shapeRenderer.rect(x, y, width * clampedRatio, height);
     }
 
-    private void drawMinimapMarker(Vector3 actorPosition, float mapX, float mapY, float mapWidth, float mapHeight, Color markerColor) {
+    private void drawWeaponHudText() {
+        WeaponConfig3D[] weapons = getWeaponSlots();
+        float slotY = WEAPON_PANEL_MARGIN;
+        for (int i = 0; i < weapons.length; i++) {
+            float slotX = WEAPON_PANEL_MARGIN + i * (WEAPON_PANEL_WIDTH + WEAPON_PANEL_GAP);
+            WeaponConfig3D weapon = weapons[i];
+            Color titleColor = playerWeapon == weapon ? Color.WHITE : PANEL_BORDER_COLOR;
+            Color roleColor = playerWeapon == weapon ? WEAPON_SLOT_ACTIVE_BORDER_COLOR : new Color(0.82f, 0.86f, 0.92f, 0.9f);
+            drawHudText((i + 1) + ": " + weapon.getName(), slotX + 10f, slotY + 31f, titleColor);
+            drawHudText(weapon.getRoleLabel(), slotX + 10f, slotY + 15f, roleColor);
+        }
+    }
+
+    private void drawWeaponSlotPanels(float slotY) {
+        WeaponConfig3D[] weapons = getWeaponSlots();
+        for (int i = 0; i < weapons.length; i++) {
+            float slotX = WEAPON_PANEL_MARGIN + i * (WEAPON_PANEL_WIDTH + WEAPON_PANEL_GAP);
+            WeaponConfig3D weapon = weapons[i];
+            shapeRenderer.setColor(playerWeapon == weapon ? WEAPON_SLOT_ACTIVE_COLOR : WEAPON_SLOT_COLOR);
+            shapeRenderer.rect(slotX, slotY, WEAPON_PANEL_WIDTH, WEAPON_PANEL_HEIGHT);
+        }
+    }
+
+    private void drawWeaponSlotBorders(float slotY) {
+        WeaponConfig3D[] weapons = getWeaponSlots();
+        for (int i = 0; i < weapons.length; i++) {
+            float slotX = WEAPON_PANEL_MARGIN + i * (WEAPON_PANEL_WIDTH + WEAPON_PANEL_GAP);
+            WeaponConfig3D weapon = weapons[i];
+            shapeRenderer.setColor(playerWeapon == weapon ? WEAPON_SLOT_ACTIVE_BORDER_COLOR : PANEL_BORDER_COLOR);
+            shapeRenderer.rect(slotX, slotY, WEAPON_PANEL_WIDTH, WEAPON_PANEL_HEIGHT);
+        }
+    }
+
+    private void drawProjectedTeamMarker(
+        Vector3 projectionTarget,
+        Vector3 actorPosition,
+        Vector3 actorFacingDirection,
+        Color baseColor,
+        boolean invincible
+    ) {
+        projectionTarget.set(actorPosition.x, actorPosition.y + TEAM_MARKER_Y_OFFSET, actorPosition.z);
+        worldCamera.project(projectionTarget);
+        if (projectionTarget.z < 0f || projectionTarget.z > 1f) {
+            return;
+        }
+
+        float centerX = projectionTarget.x;
+        float centerY = projectionTarget.y;
+        Color markerColor = invincible ? new Color(baseColor).lerp(Color.WHITE, 0.45f) : baseColor;
+        shapeRenderer.setColor(TEAM_MARKER_SHADOW_COLOR);
+        shapeRenderer.circle(centerX, centerY, TEAM_MARKER_RADIUS + 2f);
+        shapeRenderer.setColor(markerColor);
+        shapeRenderer.circle(centerX, centerY, TEAM_MARKER_RADIUS);
+        shapeRenderer.setColor(Color.WHITE);
+        shapeRenderer.circle(centerX, centerY, 3f);
+
+        float facingX = actorFacingDirection.x;
+        float facingZ = actorFacingDirection.z;
+        float facingLength = (float) Math.sqrt(facingX * facingX + facingZ * facingZ);
+        if (facingLength > 0.0001f) {
+            facingX /= facingLength;
+            facingZ /= facingLength;
+            float tipX = centerX + facingX * (TEAM_MARKER_RADIUS + 10f);
+            float tipY = centerY + facingZ * (TEAM_MARKER_RADIUS + 10f);
+            float sideX = -facingZ * 4f;
+            float sideY = facingX * 4f;
+            shapeRenderer.setColor(markerColor);
+            shapeRenderer.triangle(
+                tipX,
+                tipY,
+                tipX - facingX * 8f + sideX,
+                tipY - facingZ * 8f + sideY,
+                tipX - facingX * 8f - sideX,
+                tipY - facingZ * 8f - sideY
+            );
+        }
+    }
+
+    private void drawMinimapMarker(
+        Vector3 actorPosition,
+        Vector3 facingDirection,
+        float mapX,
+        float mapY,
+        float mapWidth,
+        float mapHeight,
+        Color markerColor
+    ) {
         float worldWidth = floorGrid.getWorldWidth();
         float worldDepth = floorGrid.getWorldDepth();
         if (worldWidth <= 0f || worldDepth <= 0f) {
@@ -889,6 +1026,31 @@ public class Main3D implements ApplicationListener {
         shapeRenderer.circle(markerX, markerY, MINIMAP_MARKER_RADIUS + 1.5f);
         shapeRenderer.setColor(markerColor);
         shapeRenderer.circle(markerX, markerY, MINIMAP_MARKER_RADIUS);
+
+        minimapFacingDirection.set(facingDirection.x, 0f, facingDirection.z);
+        if (!minimapFacingDirection.isZero(0.0001f)) {
+            minimapFacingDirection.nor();
+            float tipX = markerX + minimapFacingDirection.x * MINIMAP_DIRECTION_LENGTH;
+            float tipY = markerY + minimapFacingDirection.z * MINIMAP_DIRECTION_LENGTH;
+            float sideX = -minimapFacingDirection.z * MINIMAP_TRIANGLE_SIZE;
+            float sideY = minimapFacingDirection.x * MINIMAP_TRIANGLE_SIZE;
+            shapeRenderer.triangle(
+                tipX,
+                tipY,
+                markerX - minimapFacingDirection.x * 2.5f + sideX,
+                markerY - minimapFacingDirection.z * 2.5f + sideY,
+                markerX - minimapFacingDirection.x * 2.5f - sideX,
+                markerY - minimapFacingDirection.z * 2.5f - sideY
+            );
+        }
+    }
+
+    private WeaponConfig3D[] getWeaponSlots() {
+        return new WeaponConfig3D[] {
+            WeaponConfig3D.BASIC_SHOOTER,
+            WeaponConfig3D.SHORT_PAINTER,
+            WeaponConfig3D.LONG_SHOOTER
+        };
     }
 
     private Color getMinimapCellColor(int cellState) {
