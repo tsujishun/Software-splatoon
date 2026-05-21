@@ -27,10 +27,8 @@ public class Player3D implements Disposable {
     public static final float JUMP_VELOCITY = 5.8f;
     public static final float GRAVITY = 16.2f;
     public static final float MAX_INK_AMOUNT = 110f;
-    public static final float OWN_PAINT_INK_RECOVERY_PER_SECOND = 36f;
-    public static final float SWIM_OWN_PAINT_INK_RECOVERY_PER_SECOND = 72f;
-    public static final float NEUTRAL_INK_RECOVERY_PER_SECOND = 4f;
-    public static final float ENEMY_PAINT_INK_RECOVERY_PER_SECOND = 0f;
+    public static final float HUMAN_INK_RECOVERY_PER_SECOND = 10f;
+    public static final float SWIM_INK_RECOVERY_PER_SECOND = 72f;
     public static final float SWIM_SPEED_MULTIPLIER = 1.45f;
     public static final int MAX_HP = 3;
     public static final float HIT_RADIUS = 0.42f;
@@ -501,15 +499,11 @@ public class Player3D implements Disposable {
 
     private float getInkRecoveryPerSecond(int groundCellState) {
         if (swimming && groundCellState == FloorGrid3D.CELL_STATE_PLAYER) {
-            return SWIM_OWN_PAINT_INK_RECOVERY_PER_SECOND;
+            return SWIM_INK_RECOVERY_PER_SECOND;
         }
-        if (groundCellState == FloorGrid3D.CELL_STATE_PLAYER) {
-            return OWN_PAINT_INK_RECOVERY_PER_SECOND;
-        }
-        if (groundCellState == FloorGrid3D.CELL_STATE_ENEMY) {
-            return ENEMY_PAINT_INK_RECOVERY_PER_SECOND;
-        }
-        return NEUTRAL_INK_RECOVERY_PER_SECOND;
+
+        // Human mode always recovers slowly, no matter which floor color is under the player.
+        return HUMAN_INK_RECOVERY_PER_SECOND;
     }
 
     private void updateSwimmingState(boolean swimInput, boolean shootHeld, int groundCellState) {

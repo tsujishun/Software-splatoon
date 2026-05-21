@@ -82,6 +82,7 @@ public class Main3D implements ApplicationListener {
     private static final float WEAPON_PANEL_GAP = 10f;
     private static final float TEAM_MARKER_RADIUS = 9f;
     private static final float TEAM_MARKER_Y_OFFSET = 0.95f;
+    private static final float TEAM_MARKER_FORWARD_OFFSET = 0.7f;
     private static final float MINIMAP_DIRECTION_LENGTH = 7f;
     private static final float MINIMAP_TRIANGLE_SIZE = 5f;
     private static final float MINIMAP_MARGIN = 18f;
@@ -145,6 +146,7 @@ public class Main3D implements ApplicationListener {
     private final Vector3 desiredCameraTarget = new Vector3();
     private final Vector3 projectedPlayerMarker = new Vector3();
     private final Vector3 projectedEnemyMarker = new Vector3();
+    private final Vector3 projectedMarkerForward = new Vector3();
     private final Vector3 minimapFacingDirection = new Vector3();
 
     private GameFlowState flowState;
@@ -980,24 +982,35 @@ public class Main3D implements ApplicationListener {
         shapeRenderer.setColor(Color.WHITE);
         shapeRenderer.circle(centerX, centerY, 3f);
 
-        float facingX = actorFacingDirection.x;
-        float facingZ = actorFacingDirection.z;
-        float facingLength = (float) Math.sqrt(facingX * facingX + facingZ * facingZ);
-        if (facingLength > 0.0001f) {
-            facingX /= facingLength;
-            facingZ /= facingLength;
-            float tipX = centerX + facingX * (TEAM_MARKER_RADIUS + 10f);
-            float tipY = centerY + facingZ * (TEAM_MARKER_RADIUS + 10f);
-            float sideX = -facingZ * 4f;
-            float sideY = facingX * 4f;
+        projectedMarkerForward.set(actorFacingDirection.x, 0f, actorFacingDirection.z);
+        if (!projectedMarkerForward.isZero(0.0001f)) {
+            // Project a point slightly in front of the actor so the 2D marker
+            // arrow always matches the visible 3D facing direction.
+            projectedMarkerForward.nor().scl(TEAM_MARKER_FORWARD_OFFSET)
+                .add(actorPosition.x, actorPosition.y + TEAM_MARKER_Y_OFFSET, actorPosition.z);
+            worldCamera.project(projectedMarkerForward);
+
+            float facingScreenX = projectedMarkerForward.x - centerX;
+            float facingScreenY = projectedMarkerForward.y - centerY;
+            float facingLength = (float) Math.sqrt(facingScreenX * facingScreenX + facingScreenY * facingScreenY);
+            if (facingLength <= 0.0001f) {
+                return;
+            }
+
+            facingScreenX /= facingLength;
+            facingScreenY /= facingLength;
+            float tipX = centerX + facingScreenX * (TEAM_MARKER_RADIUS + 10f);
+            float tipY = centerY + facingScreenY * (TEAM_MARKER_RADIUS + 10f);
+            float sideX = -facingScreenY * 4f;
+            float sideY = facingScreenX * 4f;
             shapeRenderer.setColor(markerColor);
             shapeRenderer.triangle(
                 tipX,
                 tipY,
-                tipX - facingX * 8f + sideX,
-                tipY - facingZ * 8f + sideY,
-                tipX - facingX * 8f - sideX,
-                tipY - facingZ * 8f - sideY
+                tipX - facingScreenX * 8f + sideX,
+                tipY - facingScreenY * 8f + sideY,
+                tipX - facingScreenX * 8f - sideX,
+                tipY - facingScreenY * 8f - sideY
             );
         }
     }
