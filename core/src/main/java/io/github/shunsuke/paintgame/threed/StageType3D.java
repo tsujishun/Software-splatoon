@@ -5,7 +5,8 @@ package io.github.shunsuke.paintgame.threed;
  */
 public enum StageType3D {
     TRAINING_STAGE("Training Stage"),
-    WIDE_ARENA("Wide Arena");
+    WIDE_ARENA("Wide Arena"),
+    TEAM_ARENA("Team Arena");
 
     private final String displayName;
 

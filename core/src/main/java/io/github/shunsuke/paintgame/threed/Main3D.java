@@ -37,12 +37,12 @@ public class Main3D implements ApplicationListener {
     private static final boolean DEBUG_MODE = false;
     private static final String TITLE_TEXT = "Paint Battle 3D Prototype";
     private static final String TITLE_PROMPT_TEXT = "Use W/S or Up/Down, Enter to Select";
-    private static final String STEP_TEXT = "Step 36: Better Visibility";
+    private static final String STEP_TEXT = "Step 37: Team Arena & 2v2 Base";
     private static final String TITLE_CONTROL_MOVE_TEXT = "WASD: Move";
     private static final String TITLE_CONTROL_LOOK_TEXT = "Mouse: Look";
     private static final String TITLE_CONTROL_SHOOT_TEXT = "Space: Shoot";
     private static final String TITLE_CONTROL_WEAPON_TEXT = "1 / 2 / 3: Switch Weapon";
-    private static final String TITLE_CONTROL_STAGE_TEXT = "Stage Select: Training / Wide Arena";
+    private static final String TITLE_CONTROL_STAGE_TEXT = "Stage Select: Training / Wide / Team";
     private static final String TITLE_CONTROL_JUMP_TEXT = "J: Jump / Wall Jump";
     private static final String TITLE_CONTROL_SWIM_TEXT = "Shift: Swim on floor / Climb painted walls";
     private static final String TITLE_CONTROL_RETURN_TEXT = "R: Return to Title";
@@ -118,7 +118,6 @@ public class Main3D implements ApplicationListener {
     private static final Color MINIMAP_ENEMY_COLOR = new Color(1f, 0.42f, 0.7f, 1f);
     private static final Color PLAYER_HP_BAR_COLOR = new Color(0.22f, 0.95f, 0.38f, 0.95f);
     private static final Color INK_BAR_COLOR = new Color(0.15f, 0.8f, 1f, 0.95f);
-    private static final Color ENEMY_HP_BAR_COLOR = new Color(1f, 0.4f, 0.68f, 0.95f);
     private static final Color BAR_BACKGROUND_COLOR = new Color(0f, 0f, 0f, 0.55f);
     private static final Color PLAYER_DAMAGE_FLASH_COLOR = new Color(1f, 0.15f, 0.15f, 0.22f);
     private static final Color FEEDBACK_HIT_COLOR = new Color(1f, 0.92f, 0.35f, 1f);
@@ -136,7 +135,11 @@ public class Main3D implements ApplicationListener {
     private FloorGrid3D floorGrid;
     private StageObstacles3D stageObstacles;
     private Player3D player;
-    private EnemyCpu3D enemyCpu;
+    private EnemyCpu3D allyCpu;
+    private EnemyCpu3D enemyCpuOne;
+    private EnemyCpu3D enemyCpuTwo;
+    private final ArrayList<EnemyCpu3D> cpuCharacters = new ArrayList<>();
+    private final ArrayList<EnemyCpu3D> enemyTeamCpus = new ArrayList<>();
     private final ArrayList<Bullet3D> bullets = new ArrayList<>();
     private final Vector3 cameraTarget = new Vector3();
     private final Vector3 cameraDirection = new Vector3();
@@ -145,7 +148,7 @@ public class Main3D implements ApplicationListener {
     private final Vector3 desiredCameraPosition = new Vector3();
     private final Vector3 desiredCameraTarget = new Vector3();
     private final Vector3 projectedPlayerMarker = new Vector3();
-    private final Vector3 projectedEnemyMarker = new Vector3();
+    private final Vector3 projectedCpuMarker = new Vector3();
     private final Vector3 projectedMarkerForward = new Vector3();
     private final Vector3 minimapFacingDirection = new Vector3();
 
@@ -163,7 +166,6 @@ public class Main3D implements ApplicationListener {
     private CpuDifficulty3D selectedCpuDifficulty;
     private StageConfig3D currentStageConfig;
     private float fireCooldownRemaining;
-    private float enemyFireCooldownRemaining;
     private float cameraYaw;
     private float cameraPitch;
     private boolean mouseCaptured;
@@ -203,11 +205,20 @@ public class Main3D implements ApplicationListener {
         environment.add(new DirectionalLight().set(0.7f, 0.7f, 0.75f, -1f, -0.8f, -0.3f));
 
         player = new Player3D();
-        enemyCpu = new EnemyCpu3D();
+        allyCpu = new EnemyCpu3D(Team3D.PLAYER, "Ally CPU", 0);
+        enemyCpuOne = new EnemyCpu3D(Team3D.ENEMY, "Enemy CPU 1", 1);
+        enemyCpuTwo = new EnemyCpu3D(Team3D.ENEMY, "Enemy CPU 2", 2);
+        cpuCharacters.clear();
+        cpuCharacters.add(allyCpu);
+        cpuCharacters.add(enemyCpuOne);
+        cpuCharacters.add(enemyCpuTwo);
+        enemyTeamCpus.clear();
+        enemyTeamCpus.add(enemyCpuOne);
+        enemyTeamCpus.add(enemyCpuTwo);
         selectedStageType = StageType3D.TRAINING_STAGE;
         selectedTitleWeapon = WeaponConfig3D.BASIC_SHOOTER;
         selectedCpuDifficulty = CpuDifficulty3D.NORMAL;
-        enemyCpu.setDifficulty(selectedCpuDifficulty);
+        applyCpuDifficulty();
         rebuildStage(StageConfig3D.forType(selectedStageType));
         playerWeapon = selectedTitleWeapon;
         flowState = GameFlowState.TITLE;
@@ -215,7 +226,6 @@ public class Main3D implements ApplicationListener {
         countdownTimer = COUNTDOWN_TOTAL_SECONDS;
         remainingTime = GAME_DURATION_SECONDS;
         fireCooldownRemaining = 0f;
-        enemyFireCooldownRemaining = getEnemyFireInterval();
         mouseCaptured = false;
         currentPaintCellState = FloorGrid3D.CELL_STATE_PLAYER;
         resetMatchResult();
@@ -273,7 +283,9 @@ public class Main3D implements ApplicationListener {
         renderBullets();
         if (flowState != GameFlowState.TITLE) {
             player.render(modelBatch, environment);
-            enemyCpu.render(modelBatch, environment);
+            for (EnemyCpu3D cpuCharacter : cpuCharacters) {
+                cpuCharacter.render(modelBatch, environment);
+            }
         }
         modelBatch.end();
 
@@ -325,8 +337,14 @@ public class Main3D implements ApplicationListener {
         if (player != null) {
             player.dispose();
         }
-        if (enemyCpu != null) {
-            enemyCpu.dispose();
+        if (allyCpu != null) {
+            allyCpu.dispose();
+        }
+        if (enemyCpuOne != null) {
+            enemyCpuOne.dispose();
+        }
+        if (enemyCpuTwo != null) {
+            enemyCpuTwo.dispose();
         }
         clearBullets();
     }
@@ -400,14 +418,13 @@ public class Main3D implements ApplicationListener {
                 shootHeld,
                 stageObstacles
             );
-            enemyCpu.update(delta, floorGrid, player.getPosition(), !player.isSplatted(), stageObstacles);
+            updateCpuCharacters(delta);
             fireCooldownRemaining = Math.max(0f, fireCooldownRemaining - delta);
-            enemyFireCooldownRemaining = Math.max(0f, enemyFireCooldownRemaining - delta);
             inkEmptySoundCooldownRemaining = Math.max(0f, inkEmptySoundCooldownRemaining - delta);
             handlePaintColorToggle();
             handleWeaponSwitchInput();
             handleShootingInput();
-            handleEnemyShooting();
+            handleCpuShooting();
             updateBullets(delta);
             floorGrid.update(delta);
             updateCombatFeedback(delta);
@@ -492,7 +509,7 @@ public class Main3D implements ApplicationListener {
 
             if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER)) {
                 selectedCpuDifficulty = CpuDifficulty3D.values()[difficultyMenuIndex];
-                enemyCpu.setDifficulty(selectedCpuDifficulty);
+                applyCpuDifficulty();
                 titleMenuScreen = TitleMenuScreen.MAIN;
                 audioManager.playWeaponSwitch();
             }
@@ -542,7 +559,6 @@ public class Main3D implements ApplicationListener {
             drawTopLeftText(STEP_TEXT, 12f, hudCamera.viewportHeight - 12f);
             drawTopLeftText(String.format("HP %d / %d", player.getHp(), Player3D.MAX_HP), 24f, hudCamera.viewportHeight - 42f);
             drawTopLeftText(String.format("Ink %.0f / %.0f", player.getInkAmount(), Player3D.MAX_INK_AMOUNT), 24f, hudCamera.viewportHeight - 68f);
-            drawTopLeftText(String.format("Enemy HP %d / %d", enemyCpu.getHp(), EnemyCpu3D.MAX_HP), hudCamera.viewportWidth - 190f, hudCamera.viewportHeight - 42f);
             drawCenteredText(String.format("Time %d", (int) Math.ceil(remainingTime)), hudCamera.viewportHeight - 18f);
             drawTopLeftText("Weapon: " + playerWeapon.getName() + " - " + playerWeapon.getRoleLabel(), 12f, hudCamera.viewportHeight - 90f);
             drawTopLeftText(
@@ -560,14 +576,17 @@ public class Main3D implements ApplicationListener {
                 12f,
                 hudCamera.viewportHeight - 162f
             );
-            drawTopLeftText(String.format("Splats P / E: %d / %d", playerSplatCount, enemySplatCount), 12f, hudCamera.viewportHeight - 184f);
-            drawTopLeftText("J: Jump / Wall Jump   Shift: Swim / Climb", 12f, hudCamera.viewportHeight - 206f);
-            drawTopLeftText("Esc: Pause   M: Mute   R: Title", 12f, hudCamera.viewportHeight - 228f);
+            drawTopLeftText(String.format("Team Splats P / E: %d / %d", playerSplatCount, enemySplatCount), 12f, hudCamera.viewportHeight - 184f);
+            drawTopLeftText(
+                String.format("Ally HP %d   Enemy HP %d / %d", allyCpu.getHp(), enemyCpuOne.getHp(), enemyCpuTwo.getHp()),
+                12f,
+                hudCamera.viewportHeight - 206f
+            );
+            drawTopLeftText("J: Jump / Wall Jump   Shift: Swim / Climb", 12f, hudCamera.viewportHeight - 228f);
+            drawTopLeftText("Esc: Pause   M: Mute   R: Title", 12f, hudCamera.viewportHeight - 250f);
             if (DEBUG_MODE) {
-                drawTopLeftText(DEBUG_PAINT_TEXT, 12f, hudCamera.viewportHeight - 252f);
-                drawTopLeftText("Current Color: " + getCurrentPaintColorLabel(), 12f, hudCamera.viewportHeight - 274f);
-                drawTopLeftText("Enemy AI: " + enemyCpu.getCurrentState(), 12f, hudCamera.viewportHeight - 296f);
-                drawTopLeftText("Enemy Weapon: " + enemyCpu.getWeaponConfig().getName(), 12f, hudCamera.viewportHeight - 318f);
+                drawTopLeftText(DEBUG_PAINT_TEXT, 12f, hudCamera.viewportHeight - 274f);
+                drawTopLeftText("Current Color: " + getCurrentPaintColorLabel(), 12f, hudCamera.viewportHeight - 296f);
             }
 
             drawWeaponHudText();
@@ -589,9 +608,9 @@ public class Main3D implements ApplicationListener {
             drawTopLeftText(String.format("Enemy Paint: %d (%.1f%%)", floorGrid.getEnemyPaintedCellCount(), floorGrid.getEnemyPaintRatePercent()), 12f, hudCamera.viewportHeight - 62f);
             drawTopLeftText(String.format("Player HP: %d / %d", player.getHp(), Player3D.MAX_HP), 12f, hudCamera.viewportHeight - 84f);
             drawTopLeftText(String.format("Ink: %.0f / %.0f", player.getInkAmount(), Player3D.MAX_INK_AMOUNT), 12f, hudCamera.viewportHeight - 106f);
-            drawTopLeftText(String.format("Enemy HP: %d / %d", enemyCpu.getHp(), EnemyCpu3D.MAX_HP), 12f, hudCamera.viewportHeight - 128f);
+            drawTopLeftText(String.format("Ally HP: %d   Enemy HP: %d / %d", allyCpu.getHp(), enemyCpuOne.getHp(), enemyCpuTwo.getHp()), 12f, hudCamera.viewportHeight - 128f);
             drawTopLeftText("Weapon: " + playerWeapon.getName(), 12f, hudCamera.viewportHeight - 150f);
-            drawTopLeftText(String.format("Splats P / E: %d / %d", playerSplatCount, enemySplatCount), 12f, hudCamera.viewportHeight - 172f);
+            drawTopLeftText(String.format("Team Splats P / E: %d / %d", playerSplatCount, enemySplatCount), 12f, hudCamera.viewportHeight - 172f);
             drawTopLeftText(String.format("Time: %d", (int) Math.ceil(remainingTime)), hudCamera.viewportWidth - 120f, hudCamera.viewportHeight - 12f);
             drawCenteredText("Paused", hudCamera.viewportHeight / 2f + 24f);
             drawCenteredText(PAUSE_RESUME_TEXT, hudCamera.viewportHeight / 2f - 8f);
@@ -636,8 +655,10 @@ public class Main3D implements ApplicationListener {
 
         if (titleMenuScreen == TitleMenuScreen.STAGE_SELECT) {
             drawCenteredScaledTextWithShadow("Stage Select", centerY + 44f, FEEDBACK_HIT_COLOR, 1.1f);
-            drawCenteredText(getStageMenuItemText(0, stageMenuIndex == 0), centerY + 6f);
-            drawCenteredText(getStageMenuItemText(1, stageMenuIndex == 1), centerY - 20f);
+            StageType3D[] stageTypes = StageType3D.values();
+            for (int i = 0; i < stageTypes.length; i++) {
+                drawCenteredText(getStageMenuItemText(i, stageMenuIndex == i), centerY + 6f - i * 26f);
+            }
             drawCenteredText("Current Stage: " + selectedStageType.getDisplayName(), centerY - 78f);
             drawCenteredText(TITLE_CONTROL_BACK_TEXT, centerY - 120f);
             return;
@@ -714,12 +735,12 @@ public class Main3D implements ApplicationListener {
         drawCenteredScaledTextWithShadow("Game Over", centerY + 116f, Color.WHITE, 1.2f);
         drawCenteredScaledTextWithShadow(resultText, centerY + 78f, FEEDBACK_SPLAT_COLOR, 1.45f);
         drawCenteredText("Paint Result", centerY + 42f);
-        drawCenteredText(String.format("Player Tiles: %d", finalPlayerScore), centerY + 14f);
-        drawCenteredText(String.format("Enemy Tiles: %d", finalEnemyScore), centerY - 10f);
-        drawCenteredText(String.format("Player Paint Rate: %.1f%%", finalPlayerPaintRate), centerY - 38f);
-        drawCenteredText(String.format("Enemy Paint Rate: %.1f%%", finalEnemyPaintRate), centerY - 62f);
-        drawCenteredText(String.format("Player Splats: %d", finalPlayerSplats), centerY - 90f);
-        drawCenteredText(String.format("Enemy Splats: %d", finalEnemySplats), centerY - 114f);
+        drawCenteredText(String.format("Player Team Tiles: %d", finalPlayerScore), centerY + 14f);
+        drawCenteredText(String.format("Enemy Team Tiles: %d", finalEnemyScore), centerY - 10f);
+        drawCenteredText(String.format("Player Team Paint Rate: %.1f%%", finalPlayerPaintRate), centerY - 38f);
+        drawCenteredText(String.format("Enemy Team Paint Rate: %.1f%%", finalEnemyPaintRate), centerY - 62f);
+        drawCenteredText(String.format("Player Team Splats: %d", finalPlayerSplats), centerY - 90f);
+        drawCenteredText(String.format("Enemy Team Splats: %d", finalEnemySplats), centerY - 114f);
         drawCenteredText("Weapon: " + finalWeaponName, centerY - 142f);
         drawCenteredText("Enter: Retry", centerY - 178f);
         drawCenteredText("R: Return to Title", centerY - 202f);
@@ -734,8 +755,6 @@ public class Main3D implements ApplicationListener {
         float playerHpY = hudCamera.viewportHeight - 48f;
         float inkX = STATUS_BAR_MARGIN;
         float inkY = hudCamera.viewportHeight - 74f;
-        float enemyHpX = hudCamera.viewportWidth - STATUS_BAR_MARGIN - STATUS_BAR_WIDTH;
-        float enemyHpY = hudCamera.viewportHeight - 48f;
         float timePanelWidth = 110f;
         float timePanelX = (hudCamera.viewportWidth - timePanelWidth) / 2f;
         float timePanelY = hudCamera.viewportHeight - 44f;
@@ -753,7 +772,6 @@ public class Main3D implements ApplicationListener {
         shapeRenderer.setColor(PANEL_COLOR);
         shapeRenderer.rect(playerHpX - 8f, playerHpY - 6f, STATUS_BAR_WIDTH + 16f, STATUS_PANEL_HEIGHT);
         shapeRenderer.rect(inkX - 8f, inkY - 6f, STATUS_BAR_WIDTH + 16f, STATUS_PANEL_HEIGHT);
-        shapeRenderer.rect(enemyHpX - 8f, enemyHpY - 6f, STATUS_BAR_WIDTH + 16f, STATUS_PANEL_HEIGHT);
         shapeRenderer.rect(timePanelX, timePanelY, timePanelWidth, STATUS_PANEL_HEIGHT);
         drawWeaponSlotPanels(weaponPanelY);
 
@@ -766,19 +784,12 @@ public class Main3D implements ApplicationListener {
 
         drawBarFill(playerHpX, playerHpY, STATUS_BAR_WIDTH, STATUS_BAR_HEIGHT, player.getHp() / (float) Player3D.MAX_HP, PLAYER_HP_BAR_COLOR);
         drawBarFill(inkX, inkY, STATUS_BAR_WIDTH, STATUS_BAR_HEIGHT, player.getInkAmount() / Player3D.MAX_INK_AMOUNT, INK_BAR_COLOR);
-
-        Color enemyBarColor = new Color(ENEMY_HP_BAR_COLOR);
-        if (enemyHitFlashTimer > 0f) {
-            enemyBarColor.lerp(Color.WHITE, Math.min(1f, enemyHitFlashTimer / ENEMY_HIT_FLASH_DURATION));
-        }
-        drawBarFill(enemyHpX, enemyHpY, STATUS_BAR_WIDTH, STATUS_BAR_HEIGHT, enemyCpu.getHp() / (float) EnemyCpu3D.MAX_HP, enemyBarColor);
         shapeRenderer.end();
 
         shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
         shapeRenderer.setColor(PANEL_BORDER_COLOR);
         shapeRenderer.rect(playerHpX - 8f, playerHpY - 6f, STATUS_BAR_WIDTH + 16f, STATUS_PANEL_HEIGHT);
         shapeRenderer.rect(inkX - 8f, inkY - 6f, STATUS_BAR_WIDTH + 16f, STATUS_PANEL_HEIGHT);
-        shapeRenderer.rect(enemyHpX - 8f, enemyHpY - 6f, STATUS_BAR_WIDTH + 16f, STATUS_PANEL_HEIGHT);
         shapeRenderer.rect(timePanelX, timePanelY, timePanelWidth, STATUS_PANEL_HEIGHT);
         drawWeaponSlotBorders(weaponPanelY);
         if (feedbackMessageTimer > 0f && feedbackMessageText != null && !feedbackMessageText.isEmpty()) {
@@ -801,8 +812,12 @@ public class Main3D implements ApplicationListener {
         if (!player.isSplatted()) {
             drawProjectedTeamMarker(projectedPlayerMarker, player.getPosition(), player.getFacingDirection(), PLAYER_TEAM_MARKER_COLOR, player.isInvincible());
         }
-        if (!enemyCpu.isSplatted()) {
-            drawProjectedTeamMarker(projectedEnemyMarker, enemyCpu.getPosition(), enemyCpu.getFacingDirection(), ENEMY_TEAM_MARKER_COLOR, enemyCpu.isInvincible());
+        for (EnemyCpu3D cpuCharacter : cpuCharacters) {
+            if (cpuCharacter.isSplatted()) {
+                continue;
+            }
+            Color markerColor = cpuCharacter.getTeam() == Team3D.PLAYER ? PLAYER_TEAM_MARKER_COLOR : ENEMY_TEAM_MARKER_COLOR;
+            drawProjectedTeamMarker(projectedCpuMarker, cpuCharacter.getPosition(), cpuCharacter.getFacingDirection(), markerColor, cpuCharacter.isInvincible());
         }
 
         shapeRenderer.end();
@@ -856,8 +871,12 @@ public class Main3D implements ApplicationListener {
         if (!player.isSplatted()) {
             drawMinimapMarker(player.getPosition(), player.getFacingDirection(), mapX, mapY, mapWidth, mapHeight, MINIMAP_PLAYER_COLOR);
         }
-        if (!enemyCpu.isSplatted()) {
-            drawMinimapMarker(enemyCpu.getPosition(), enemyCpu.getFacingDirection(), mapX, mapY, mapWidth, mapHeight, MINIMAP_ENEMY_COLOR);
+        for (EnemyCpu3D cpuCharacter : cpuCharacters) {
+            if (cpuCharacter.isSplatted()) {
+                continue;
+            }
+            Color markerColor = cpuCharacter.getTeam() == Team3D.PLAYER ? MINIMAP_PLAYER_COLOR : MINIMAP_ENEMY_COLOR;
+            drawMinimapMarker(cpuCharacter.getPosition(), cpuCharacter.getFacingDirection(), mapX, mapY, mapWidth, mapHeight, markerColor);
         }
         shapeRenderer.end();
 
@@ -1132,7 +1151,7 @@ public class Main3D implements ApplicationListener {
 
     private void goToTitleScreen() {
         rebuildStage(StageConfig3D.forType(selectedStageType));
-        enemyCpu.setDifficulty(selectedCpuDifficulty);
+        applyCpuDifficulty();
         flowState = GameFlowState.TITLE;
         resetRoundState();
         resetTitleMenuState();
@@ -1142,7 +1161,7 @@ public class Main3D implements ApplicationListener {
 
     private void startCountdown() {
         rebuildStage(StageConfig3D.forType(selectedStageType));
-        enemyCpu.setDifficulty(selectedCpuDifficulty);
+        applyCpuDifficulty();
         flowState = GameFlowState.COUNTDOWN;
         resetRoundState();
         audioManager.playBattleBgm();
@@ -1155,7 +1174,6 @@ public class Main3D implements ApplicationListener {
         remainingTime = GAME_DURATION_SECONDS;
         playerWeapon = selectedTitleWeapon;
         fireCooldownRemaining = 0f;
-        enemyFireCooldownRemaining = getEnemyFireInterval();
         currentPaintCellState = FloorGrid3D.CELL_STATE_PLAYER;
         resetMatchResult();
         playerSplatCount = 0;
@@ -1336,22 +1354,19 @@ public class Main3D implements ApplicationListener {
         }
     }
 
-    private void handleEnemyShooting() {
-        if (enemyCpu.isSplatted()) {
-            return;
-        }
-
-        while (enemyFireCooldownRemaining <= 0f) {
-            WeaponConfig3D enemyWeapon = enemyCpu.getWeaponConfig();
-            audioManager.playEnemyShoot();
-            bullets.add(new Bullet3D(
-                enemyCpu.getPosition(),
-                enemyCpu.getFacingDirection(),
-                enemyWeapon,
-                Bullet3D.OWNER_ENEMY,
-                FloorGrid3D.CELL_STATE_ENEMY
-            ));
-            enemyFireCooldownRemaining += getEnemyFireInterval();
+    private void handleCpuShooting() {
+        for (EnemyCpu3D cpuCharacter : cpuCharacters) {
+            while (cpuCharacter.canShoot()) {
+                audioManager.playEnemyShoot();
+                bullets.add(new Bullet3D(
+                    cpuCharacter.getPosition(),
+                    cpuCharacter.getFacingDirection(),
+                    cpuCharacter.getWeaponConfig(),
+                    cpuCharacter.getTeam().getBulletOwnerType(),
+                    cpuCharacter.getTeam().getPaintCellState()
+                ));
+                cpuCharacter.consumeShotCooldown();
+            }
         }
     }
 
@@ -1370,15 +1385,19 @@ public class Main3D implements ApplicationListener {
 
     private boolean handleBulletCharacterHit(Bullet3D bullet) {
         if (bullet.getOwnerType() == Bullet3D.OWNER_PLAYER) {
-            if (!enemyCpu.isSplatted()
-                && !enemyCpu.isInvincible()
-                && isHitOnFloorPlane(bullet.getPosition(), enemyCpu.getPosition(), enemyCpu.getHitRadius())) {
+            for (EnemyCpu3D enemyTarget : enemyTeamCpus) {
+                if (enemyTarget.isSplatted() || enemyTarget.isInvincible()) {
+                    continue;
+                }
+                if (!isHitOnFloorPlane(bullet.getPosition(), enemyTarget.getPosition(), enemyTarget.getHitRadius())) {
+                    continue;
+                }
                 enemyHitFlashTimer = ENEMY_HIT_FLASH_DURATION;
                 audioManager.playHit();
-                if (enemyCpu.takeHit()) {
+                if (enemyTarget.takeHit()) {
                     playerSplatCount++;
                     audioManager.playEnemySplatted();
-                    showFeedbackMessage("Enemy Splatted!", FEEDBACK_SPLAT_COLOR, SPLAT_MESSAGE_DURATION);
+                    showFeedbackMessage(enemyTarget.getDisplayName() + " Splatted!", FEEDBACK_SPLAT_COLOR, SPLAT_MESSAGE_DURATION);
                 } else {
                     showFeedbackMessage("Hit!", FEEDBACK_HIT_COLOR, HIT_MESSAGE_DURATION);
                 }
@@ -1388,14 +1407,23 @@ public class Main3D implements ApplicationListener {
         }
 
         if (bullet.getOwnerType() == Bullet3D.OWNER_ENEMY) {
-            if (!player.isSplatted()
-                && !player.isInvincible()
-                && isHitOnFloorPlane(bullet.getPosition(), player.getPosition(), player.getHitRadius())) {
+            if (isPlayerCharacterHit(bullet.getPosition(), player)) {
                 playerHitFlashTimer = PLAYER_HIT_FLASH_DURATION;
                 audioManager.playHit();
                 if (player.takeHit()) {
                     enemySplatCount++;
                     audioManager.playPlayerSplatted();
+                }
+                return true;
+            }
+            if (!allyCpu.isSplatted()
+                && !allyCpu.isInvincible()
+                && isHitOnFloorPlane(bullet.getPosition(), allyCpu.getPosition(), allyCpu.getHitRadius())) {
+                audioManager.playHit();
+                if (allyCpu.takeHit()) {
+                    enemySplatCount++;
+                    audioManager.playEnemySplatted();
+                    showFeedbackMessage("Ally Splatted!", FEEDBACK_SPLAT_COLOR, SPLAT_MESSAGE_DURATION);
                 }
                 return true;
             }
@@ -1420,6 +1448,12 @@ public class Main3D implements ApplicationListener {
         float deltaX = bulletPosition.x - targetPosition.x;
         float deltaZ = bulletPosition.z - targetPosition.z;
         return deltaX * deltaX + deltaZ * deltaZ <= hitRadius * hitRadius;
+    }
+
+    private boolean isPlayerCharacterHit(Vector3 bulletPosition, Player3D targetPlayer) {
+        return !targetPlayer.isSplatted()
+            && !targetPlayer.isInvincible()
+            && isHitOnFloorPlane(bulletPosition, targetPlayer.getPosition(), targetPlayer.getHitRadius());
     }
 
     private void updateCombatFeedback(float delta) {
@@ -1545,8 +1579,73 @@ public class Main3D implements ApplicationListener {
         inkEmptySoundCooldownRemaining = INK_EMPTY_SOUND_COOLDOWN;
     }
 
-    private float getEnemyFireInterval() {
-        return enemyCpu.getWeaponConfig().getFireInterval() * enemyCpu.getFireIntervalMultiplier();
+    private void updateCpuCharacters(float delta) {
+        for (EnemyCpu3D cpuCharacter : cpuCharacters) {
+            Vector3 targetPosition = findTargetPositionFor(cpuCharacter);
+            boolean targetable = targetPosition != null;
+            cpuCharacter.update(
+                delta,
+                floorGrid,
+                targetable ? targetPosition : cpuCharacter.getPosition(),
+                targetable,
+                stageObstacles
+            );
+        }
+    }
+
+    private Vector3 findTargetPositionFor(EnemyCpu3D cpuCharacter) {
+        if (cpuCharacter.getTeam() == Team3D.PLAYER) {
+            return findNearestCpuTarget(cpuCharacter.getPosition(), enemyTeamCpus);
+        }
+
+        Vector3 nearestTarget = null;
+        float nearestDistanceSquared = Float.MAX_VALUE;
+
+        if (!player.isSplatted()) {
+            float distanceSquared = getDistanceSquared(cpuCharacter.getPosition(), player.getPosition());
+            if (distanceSquared < nearestDistanceSquared) {
+                nearestDistanceSquared = distanceSquared;
+                nearestTarget = player.getPosition();
+            }
+        }
+
+        if (!allyCpu.isSplatted()) {
+            float distanceSquared = getDistanceSquared(cpuCharacter.getPosition(), allyCpu.getPosition());
+            if (distanceSquared < nearestDistanceSquared) {
+                nearestDistanceSquared = distanceSquared;
+                nearestTarget = allyCpu.getPosition();
+            }
+        }
+
+        return nearestTarget;
+    }
+
+    private Vector3 findNearestCpuTarget(Vector3 fromPosition, ArrayList<EnemyCpu3D> candidates) {
+        Vector3 nearestTarget = null;
+        float nearestDistanceSquared = Float.MAX_VALUE;
+        for (EnemyCpu3D candidate : candidates) {
+            if (candidate.isSplatted()) {
+                continue;
+            }
+            float distanceSquared = getDistanceSquared(fromPosition, candidate.getPosition());
+            if (distanceSquared < nearestDistanceSquared) {
+                nearestDistanceSquared = distanceSquared;
+                nearestTarget = candidate.getPosition();
+            }
+        }
+        return nearestTarget;
+    }
+
+    private float getDistanceSquared(Vector3 fromPosition, Vector3 toPosition) {
+        float deltaX = toPosition.x - fromPosition.x;
+        float deltaZ = toPosition.z - fromPosition.z;
+        return deltaX * deltaX + deltaZ * deltaZ;
+    }
+
+    private void applyCpuDifficulty() {
+        for (EnemyCpu3D cpuCharacter : cpuCharacters) {
+            cpuCharacter.setDifficulty(selectedCpuDifficulty);
+        }
     }
 
     private String getGroundStateLabel(Vector3 actorPosition) {
@@ -1596,7 +1695,9 @@ public class Main3D implements ApplicationListener {
         floorGrid = new FloorGrid3D(stageConfig.getColumns(), stageConfig.getRows());
         stageObstacles = new StageObstacles3D(stageConfig);
         player.reset(stageConfig);
-        enemyCpu.reset(floorGrid, stageConfig);
+        for (EnemyCpu3D cpuCharacter : cpuCharacters) {
+            cpuCharacter.reset(floorGrid, stageConfig);
+        }
     }
 
     private boolean isTitleUpPressed() {

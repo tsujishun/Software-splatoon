@@ -40,11 +40,16 @@ public class EnemyCpu3D implements Disposable {
     private static final float SPAWN_INSET = 1.45f;
     private static final float RETREAT_RANGE = 1.9f;
     private static final float APPROACH_RANGE = 3.4f;
-    private static final Color ENEMY_COLOR = new Color(0.95f, 0.45f, 0.7f, 1f);
-    private static final Color ENEMY_HEAD_COLOR = new Color(1f, 0.78f, 0.9f, 1f);
-    private static final Color ENEMY_NOSE_COLOR = new Color(0.42f, 0.08f, 0.26f, 1f);
-    private static final Color ENEMY_MARKER_COLOR = new Color(1f, 0.9f, 0.35f, 1f);
-    private static final Color ENEMY_ATTACK_MARKER_COLOR = new Color(1f, 0.45f, 0.28f, 1f);
+    private static final Color PLAYER_TEAM_BODY_COLOR = new Color(0.2f, 0.82f, 1f, 1f);
+    private static final Color PLAYER_TEAM_HEAD_COLOR = new Color(0.78f, 0.95f, 1f, 1f);
+    private static final Color PLAYER_TEAM_NOSE_COLOR = new Color(0.05f, 0.26f, 0.38f, 1f);
+    private static final Color PLAYER_TEAM_MARKER_COLOR = new Color(0.9f, 1f, 0.35f, 1f);
+    private static final Color PLAYER_TEAM_ATTACK_MARKER_COLOR = new Color(0.35f, 0.92f, 1f, 1f);
+    private static final Color ENEMY_TEAM_BODY_COLOR = new Color(0.95f, 0.45f, 0.7f, 1f);
+    private static final Color ENEMY_TEAM_HEAD_COLOR = new Color(1f, 0.78f, 0.9f, 1f);
+    private static final Color ENEMY_TEAM_NOSE_COLOR = new Color(0.42f, 0.08f, 0.26f, 1f);
+    private static final Color ENEMY_TEAM_MARKER_COLOR = new Color(1f, 0.9f, 0.35f, 1f);
+    private static final Color ENEMY_TEAM_ATTACK_MARKER_COLOR = new Color(1f, 0.45f, 0.28f, 1f);
     private static final float BODY_OFFSET_Y = -0.15f;
     private static final float HEAD_OFFSET_Y = 0.14f;
     private static final float HEAD_OFFSET_Z = -0.02f;
@@ -60,6 +65,9 @@ public class EnemyCpu3D implements Disposable {
     private final ModelInstance headInstance;
     private final ModelInstance noseInstance;
     private final ModelInstance markerInstance;
+    private final Team3D team;
+    private final String displayName;
+    private final int spawnIndex;
     private final Vector3 position = new Vector3();
     private final Vector3 spawnPosition = new Vector3();
     private final Vector3 facingDirection = new Vector3(0f, 0f, -1f);
@@ -75,8 +83,14 @@ public class EnemyCpu3D implements Disposable {
     private final Color noseTint = new Color();
     private final Color markerTint = new Color();
     private final WeaponConfig3D weaponConfig = WeaponConfig3D.ENEMY_SHOOTER;
+    private final Color bodyBaseColor;
+    private final Color headBaseColor;
+    private final Color noseBaseColor;
+    private final Color markerBaseColor;
+    private final Color attackMarkerColor;
 
     private float directionChangeTimer;
+    private float fireCooldownRemaining;
     private int hp;
     private boolean splatted;
     private float respawnTimer;
@@ -84,7 +98,15 @@ public class EnemyCpu3D implements Disposable {
     private EnemyState currentState = EnemyState.PAINT;
     private CpuDifficulty3D difficulty = CpuDifficulty3D.NORMAL;
 
-    public EnemyCpu3D() {
+    public EnemyCpu3D(Team3D team, String displayName, int spawnIndex) {
+        this.team = team;
+        this.displayName = displayName;
+        this.spawnIndex = spawnIndex;
+        this.bodyBaseColor = team == Team3D.PLAYER ? PLAYER_TEAM_BODY_COLOR : ENEMY_TEAM_BODY_COLOR;
+        this.headBaseColor = team == Team3D.PLAYER ? PLAYER_TEAM_HEAD_COLOR : ENEMY_TEAM_HEAD_COLOR;
+        this.noseBaseColor = team == Team3D.PLAYER ? PLAYER_TEAM_NOSE_COLOR : ENEMY_TEAM_NOSE_COLOR;
+        this.markerBaseColor = team == Team3D.PLAYER ? PLAYER_TEAM_MARKER_COLOR : ENEMY_TEAM_MARKER_COLOR;
+        this.attackMarkerColor = team == Team3D.PLAYER ? PLAYER_TEAM_ATTACK_MARKER_COLOR : ENEMY_TEAM_ATTACK_MARKER_COLOR;
         ModelBuilder modelBuilder = new ModelBuilder();
         bodyModel = modelBuilder.createSphere(
             0.82f,
@@ -92,7 +114,7 @@ public class EnemyCpu3D implements Disposable {
             0.82f,
             16,
             16,
-            new Material(ColorAttribute.createDiffuse(ENEMY_COLOR)),
+            new Material(ColorAttribute.createDiffuse(bodyBaseColor)),
             Usage.Position | Usage.Normal
         );
         headModel = modelBuilder.createSphere(
@@ -101,21 +123,21 @@ public class EnemyCpu3D implements Disposable {
             0.48f,
             16,
             16,
-            new Material(ColorAttribute.createDiffuse(ENEMY_HEAD_COLOR)),
+            new Material(ColorAttribute.createDiffuse(headBaseColor)),
             Usage.Position | Usage.Normal
         );
         noseModel = modelBuilder.createBox(
             0.14f,
             0.16f,
             0.28f,
-            new Material(ColorAttribute.createDiffuse(ENEMY_NOSE_COLOR)),
+            new Material(ColorAttribute.createDiffuse(noseBaseColor)),
             Usage.Position | Usage.Normal
         );
         markerModel = modelBuilder.createBox(
             0.62f,
             0.05f,
             0.62f,
-            new Material(ColorAttribute.createDiffuse(ENEMY_MARKER_COLOR)),
+            new Material(ColorAttribute.createDiffuse(markerBaseColor)),
             Usage.Position | Usage.Normal
         );
         bodyInstance = new ModelInstance(bodyModel);
@@ -127,17 +149,18 @@ public class EnemyCpu3D implements Disposable {
     public void update(
         float delta,
         FloorGrid3D floorGrid,
-        Vector3 playerPosition,
-        boolean playerTargetable,
+        Vector3 targetPosition,
+        boolean targetable,
         StageObstacles3D stageObstacles
     ) {
         updateTimers(delta, floorGrid);
+        fireCooldownRemaining = Math.max(0f, fireCooldownRemaining - delta);
         if (splatted) {
             currentState = EnemyState.RESPAWN;
             return;
         }
 
-        updateBehavior(delta, playerPosition, playerTargetable);
+        updateBehavior(delta, targetPosition, targetable);
 
         float speedMultiplier = getGroundSpeedMultiplier(floorGrid.getCellStateAtWorldPosition(position.x, position.z));
         float moveSpeed = MOVE_SPEED * difficulty.getMoveSpeedMultiplier() * speedMultiplier;
@@ -177,6 +200,7 @@ public class EnemyCpu3D implements Disposable {
         splatted = false;
         respawnTimer = 0f;
         invincibleTimer = 0f;
+        fireCooldownRemaining = getFireInterval();
         currentState = EnemyState.PAINT;
         setSpawnPosition(floorGrid);
         position.set(spawnPosition);
@@ -189,6 +213,7 @@ public class EnemyCpu3D implements Disposable {
         splatted = false;
         respawnTimer = 0f;
         invincibleTimer = 0f;
+        fireCooldownRemaining = getFireInterval();
         currentState = EnemyState.PAINT;
         setSpawnPosition(floorGrid, stageConfig);
         position.set(spawnPosition);
@@ -239,6 +264,14 @@ public class EnemyCpu3D implements Disposable {
         return facingDirection;
     }
 
+    public Team3D getTeam() {
+        return team;
+    }
+
+    public String getDisplayName() {
+        return displayName;
+    }
+
     public EnemyState getCurrentState() {
         return currentState;
     }
@@ -247,8 +280,12 @@ public class EnemyCpu3D implements Disposable {
         return weaponConfig;
     }
 
-    public float getFireIntervalMultiplier() {
-        return difficulty.getFireIntervalMultiplier();
+    public boolean canShoot() {
+        return !splatted && fireCooldownRemaining <= 0f;
+    }
+
+    public void consumeShotCooldown() {
+        fireCooldownRemaining += getFireInterval();
     }
 
     public CpuDifficulty3D getDifficulty() {
@@ -289,14 +326,15 @@ public class EnemyCpu3D implements Disposable {
         hp = MAX_HP;
         splatted = false;
         invincibleTimer = INVINCIBLE_SECONDS;
+        fireCooldownRemaining = getFireInterval();
         currentState = EnemyState.PAINT;
         chooseDirectionTowardCenter();
         updateTransform();
     }
 
-    private void updateBehavior(float delta, Vector3 playerPosition, boolean playerTargetable) {
-        if (playerTargetable && isPlayerInsideAttackRange(playerPosition)) {
-            updateAttackBehavior(playerPosition, delta);
+    private void updateBehavior(float delta, Vector3 targetPosition, boolean targetable) {
+        if (targetable && isTargetInsideAttackRange(targetPosition)) {
+            updateAttackBehavior(targetPosition, delta);
             return;
         }
 
@@ -307,16 +345,16 @@ public class EnemyCpu3D implements Disposable {
         }
     }
 
-    private boolean isPlayerInsideAttackRange(Vector3 playerPosition) {
-        float deltaX = playerPosition.x - position.x;
-        float deltaZ = playerPosition.z - position.z;
+    private boolean isTargetInsideAttackRange(Vector3 targetPosition) {
+        float deltaX = targetPosition.x - position.x;
+        float deltaZ = targetPosition.z - position.z;
         float attackRange = difficulty.getAttackRange();
         return deltaX * deltaX + deltaZ * deltaZ <= attackRange * attackRange;
     }
 
-    private void updateAttackBehavior(Vector3 playerPosition, float delta) {
+    private void updateAttackBehavior(Vector3 targetPosition, float delta) {
         currentState = EnemyState.ATTACK;
-        targetDirection.set(playerPosition.x - position.x, 0f, playerPosition.z - position.z);
+        targetDirection.set(targetPosition.x - position.x, 0f, targetPosition.z - position.z);
         if (targetDirection.isZero(0.0001f)) {
             targetDirection.set(facingDirection);
         } else {
@@ -326,17 +364,17 @@ public class EnemyCpu3D implements Disposable {
         float aimAlpha = Math.min(1f, difficulty.getAimAccuracy() * delta);
         facingDirection.lerp(targetDirection, aimAlpha).nor();
 
-        float deltaX = playerPosition.x - position.x;
-        float deltaZ = playerPosition.z - position.z;
-        float distanceToPlayer = (float) Math.sqrt(deltaX * deltaX + deltaZ * deltaZ);
+        float deltaX = targetPosition.x - position.x;
+        float deltaZ = targetPosition.z - position.z;
+        float distanceToTarget = (float) Math.sqrt(deltaX * deltaX + deltaZ * deltaZ);
 
-        if (distanceToPlayer < RETREAT_RANGE) {
+        if (distanceToTarget < RETREAT_RANGE) {
             retreatDirection.set(targetDirection).scl(-1f);
             moveDirection.set(retreatDirection).nor();
             return;
         }
 
-        if (distanceToPlayer > APPROACH_RANGE) {
+        if (distanceToTarget > APPROACH_RANGE) {
             moveDirection.set(targetDirection).nor();
             return;
         }
@@ -372,9 +410,9 @@ public class EnemyCpu3D implements Disposable {
         float maxZ = floorGrid.getMaxZ() - radius;
 
         spawnPosition.set(
-            MathUtils.clamp(stageConfig.getEnemySpawnX(), minX, maxX),
+            MathUtils.clamp(stageConfig.getCpuSpawnX(spawnIndex), minX, maxX),
             radius,
-            MathUtils.clamp(stageConfig.getEnemySpawnZ(), minZ, maxZ)
+            MathUtils.clamp(stageConfig.getCpuSpawnZ(spawnIndex), minZ, maxZ)
         );
     }
 
@@ -418,11 +456,11 @@ public class EnemyCpu3D implements Disposable {
         setPartTransform(markerInstance, 0f, MARKER_OFFSET_Y, 0f);
 
         float invincibleFlash = getInvincibleFlash();
-        setInstanceColor(bodyInstance, bodyTint.set(ENEMY_COLOR).lerp(Color.WHITE, invincibleFlash));
-        setInstanceColor(headInstance, headTint.set(ENEMY_HEAD_COLOR).lerp(Color.WHITE, invincibleFlash));
-        setInstanceColor(noseInstance, noseTint.set(ENEMY_NOSE_COLOR).lerp(Color.WHITE, invincibleFlash * 0.5f));
-        Color markerBaseColor = currentState == EnemyState.ATTACK ? ENEMY_ATTACK_MARKER_COLOR : ENEMY_MARKER_COLOR;
-        setInstanceColor(markerInstance, markerTint.set(markerBaseColor).lerp(Color.WHITE, invincibleFlash));
+        setInstanceColor(bodyInstance, bodyTint.set(bodyBaseColor).lerp(Color.WHITE, invincibleFlash));
+        setInstanceColor(headInstance, headTint.set(headBaseColor).lerp(Color.WHITE, invincibleFlash));
+        setInstanceColor(noseInstance, noseTint.set(noseBaseColor).lerp(Color.WHITE, invincibleFlash * 0.5f));
+        Color currentMarkerColor = currentState == EnemyState.ATTACK ? attackMarkerColor : markerBaseColor;
+        setInstanceColor(markerInstance, markerTint.set(currentMarkerColor).lerp(Color.WHITE, invincibleFlash));
     }
 
     private void setPartTransform(ModelInstance partInstance, float offsetX, float offsetY, float offsetZ) {
@@ -468,12 +506,16 @@ public class EnemyCpu3D implements Disposable {
     }
 
     private float getGroundSpeedMultiplier(int groundCellState) {
-        if (groundCellState == FloorGrid3D.CELL_STATE_ENEMY) {
+        if (team.isOwnPaint(groundCellState)) {
             return OWN_PAINT_SPEED_MULTIPLIER;
         }
-        if (groundCellState == FloorGrid3D.CELL_STATE_PLAYER) {
+        if (team.isEnemyPaint(groundCellState)) {
             return ENEMY_PAINT_SPEED_MULTIPLIER;
         }
         return NEUTRAL_SPEED_MULTIPLIER;
+    }
+
+    private float getFireInterval() {
+        return weaponConfig.getFireInterval() * difficulty.getFireIntervalMultiplier();
     }
 }

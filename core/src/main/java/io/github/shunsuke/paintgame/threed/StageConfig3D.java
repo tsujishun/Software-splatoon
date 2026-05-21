@@ -10,8 +10,7 @@ public class StageConfig3D {
     private final int rows;
     private final float playerSpawnX;
     private final float playerSpawnZ;
-    private final float enemySpawnX;
-    private final float enemySpawnZ;
+    private final SpawnPoint[] cpuSpawnPoints;
     private final ObstacleSpec[] obstacleSpecs;
 
     public StageConfig3D(
@@ -20,8 +19,7 @@ public class StageConfig3D {
         int rows,
         float playerSpawnX,
         float playerSpawnZ,
-        float enemySpawnX,
-        float enemySpawnZ,
+        SpawnPoint[] cpuSpawnPoints,
         ObstacleSpec[] obstacleSpecs
     ) {
         this.stageType = stageType;
@@ -29,8 +27,7 @@ public class StageConfig3D {
         this.rows = rows;
         this.playerSpawnX = playerSpawnX;
         this.playerSpawnZ = playerSpawnZ;
-        this.enemySpawnX = enemySpawnX;
-        this.enemySpawnZ = enemySpawnZ;
+        this.cpuSpawnPoints = cpuSpawnPoints.clone();
         this.obstacleSpecs = obstacleSpecs.clone();
     }
 
@@ -58,12 +55,16 @@ public class StageConfig3D {
         return playerSpawnZ;
     }
 
-    public float getEnemySpawnX() {
-        return enemySpawnX;
+    public int getCpuSpawnCount() {
+        return cpuSpawnPoints.length;
     }
 
-    public float getEnemySpawnZ() {
-        return enemySpawnZ;
+    public float getCpuSpawnX(int index) {
+        return cpuSpawnPoints[index].getX();
+    }
+
+    public float getCpuSpawnZ(int index) {
+        return cpuSpawnPoints[index].getZ();
     }
 
     public ObstacleSpec[] getObstacleSpecs() {
@@ -73,6 +74,9 @@ public class StageConfig3D {
     public static StageConfig3D forType(StageType3D stageType) {
         if (stageType == StageType3D.WIDE_ARENA) {
             return wideArena();
+        }
+        if (stageType == StageType3D.TEAM_ARENA) {
+            return teamArena();
         }
         return trainingStage();
     }
@@ -84,8 +88,11 @@ public class StageConfig3D {
             12,
             -4.2f,
             -4.2f,
-            4.2f,
-            4.2f,
+            new SpawnPoint[] {
+                new SpawnPoint(-2.6f, -4.6f),
+                new SpawnPoint(4.2f, 4.2f),
+                new SpawnPoint(2.8f, 3.1f)
+            },
             new ObstacleSpec[] {
                 new ObstacleSpec(0f, 0f, 1.65f, 1.65f, 1.35f, false),
                 new ObstacleSpec(-2.9f, 0f, 1.45f, 2.7f, 0.82f, true),
@@ -103,8 +110,11 @@ public class StageConfig3D {
             16,
             -5.9f,
             -5.7f,
-            5.9f,
-            5.7f,
+            new SpawnPoint[] {
+                new SpawnPoint(-3.6f, -6.1f),
+                new SpawnPoint(5.9f, 5.7f),
+                new SpawnPoint(3.6f, 6.1f)
+            },
             new ObstacleSpec[] {
                 // Central cover block.
                 new ObstacleSpec(0f, 0f, 2.4f, 2.0f, 1.45f, false),
@@ -122,6 +132,63 @@ public class StageConfig3D {
                 new ObstacleSpec(1.9f, -2.2f, 1.1f, 1.1f, 1.15f, false)
             }
         );
+    }
+
+    private static StageConfig3D teamArena() {
+        return new StageConfig3D(
+            StageType3D.TEAM_ARENA,
+            20,
+            20,
+            -7.6f,
+            -7.2f,
+            new SpawnPoint[] {
+                new SpawnPoint(-4.6f, -7.0f),
+                new SpawnPoint(7.4f, 7.0f),
+                new SpawnPoint(4.6f, 7.2f)
+            },
+            new ObstacleSpec[] {
+                // Central big cover that breaks long sight lines.
+                new ObstacleSpec(0f, 0f, 3.4f, 2.6f, 1.55f, false),
+                new ObstacleSpec(0f, 3.9f, 2.0f, 1.2f, 1.35f, false),
+                new ObstacleSpec(0f, -3.9f, 2.0f, 1.2f, 1.35f, false),
+
+                // Side platforms for jump routes.
+                new ObstacleSpec(-7.2f, 0f, 2.0f, 3.8f, 0.82f, true),
+                new ObstacleSpec(7.2f, 0f, 2.0f, 3.8f, 0.82f, true),
+
+                // Paint-and-climb walls near the center sides.
+                new ObstacleSpec(-2.8f, 6.2f, 2.8f, 1.15f, 2.0f, false),
+                new ObstacleSpec(2.8f, -6.2f, 2.8f, 1.15f, 2.0f, false),
+
+                // Wide lane blockers to keep multiple routes without fully trapping CPUs.
+                new ObstacleSpec(-5.2f, 4.0f, 1.25f, 3.0f, 1.1f, false),
+                new ObstacleSpec(5.2f, -4.0f, 1.25f, 3.0f, 1.1f, false),
+                new ObstacleSpec(-5.2f, -4.0f, 1.25f, 3.0f, 1.1f, false),
+                new ObstacleSpec(5.2f, 4.0f, 1.25f, 3.0f, 1.1f, false),
+
+                // Small center-side platforms for mixed jump and paint routes.
+                new ObstacleSpec(-1.6f, -1.9f, 1.5f, 1.5f, 0.82f, true),
+                new ObstacleSpec(1.6f, 1.9f, 1.5f, 1.5f, 0.82f, true)
+            }
+        );
+    }
+
+    public static class SpawnPoint {
+        private final float x;
+        private final float z;
+
+        public SpawnPoint(float x, float z) {
+            this.x = x;
+            this.z = z;
+        }
+
+        public float getX() {
+            return x;
+        }
+
+        public float getZ() {
+            return z;
+        }
     }
 
     public static class ObstacleSpec {
