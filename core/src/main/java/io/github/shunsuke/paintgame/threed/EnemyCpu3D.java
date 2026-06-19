@@ -25,6 +25,14 @@ public class EnemyCpu3D implements Disposable {
         RESPAWN
     }
 
+    private enum AttackMoveMode {
+        APPROACH,
+        STRAFE_LEFT,
+        STRAFE_RIGHT,
+        RETREAT,
+        PAINT
+    }
+
     public static final float MOVE_SPEED = 2.8f;
     public static final float OWN_PAINT_SPEED_MULTIPLIER = 1.15f;
     public static final float ENEMY_PAINT_SPEED_MULTIPLIER = 0.78f;
@@ -40,6 +48,11 @@ public class EnemyCpu3D implements Disposable {
     private static final float SPAWN_INSET = 1.45f;
     private static final float RETREAT_RANGE = 1.9f;
     private static final float APPROACH_RANGE = 3.4f;
+    private static final float ATTACK_DIRECTION_JITTER_DEGREES = 14f;
+    private static final float ATTACK_STRAFE_FORWARD_BLEND = 0.28f;
+    private static final float ATTACK_STRAFE_BACKWARD_BLEND = 0.14f;
+    private static final float ATTACK_PAINT_WANDER_MIN_DEGREES = 45f;
+    private static final float ATTACK_PAINT_WANDER_MAX_DEGREES = 95f;
     private static final Color PLAYER_TEAM_BODY_COLOR = new Color(0.2f, 0.82f, 1f, 1f);
     private static final Color PLAYER_TEAM_HEAD_COLOR = new Color(0.78f, 0.95f, 1f, 1f);
     private static final Color PLAYER_TEAM_NOSE_COLOR = new Color(0.05f, 0.26f, 0.38f, 1f);
@@ -77,6 +90,8 @@ public class EnemyCpu3D implements Disposable {
     private final Vector3 targetDirection = new Vector3();
     private final Vector3 retreatDirection = new Vector3();
     private final Vector3 sidestepDirection = new Vector3();
+    private final Vector3 attackMoveDirection = new Vector3();
+    private final Vector3 shotDirection = new Vector3();
     private final Matrix4 actorTransform = new Matrix4();
     private final Color bodyTint = new Color();
     private final Color headTint = new Color();
@@ -91,11 +106,13 @@ public class EnemyCpu3D implements Disposable {
 
     private float directionChangeTimer;
     private float fireCooldownRemaining;
+    private float attackMoveTimer;
     private int hp;
     private boolean splatted;
     private float respawnTimer;
     private float invincibleTimer;
     private EnemyState currentState = EnemyState.PAINT;
+    private AttackMoveMode currentAttackMoveMode = AttackMoveMode.APPROACH;
     private CpuDifficulty3D difficulty = CpuDifficulty3D.NORMAL;
 
     public EnemyCpu3D(Team3D team, String displayName, int spawnIndex) {
@@ -201,6 +218,7 @@ public class EnemyCpu3D implements Disposable {
         respawnTimer = 0f;
         invincibleTimer = 0f;
         fireCooldownRemaining = getFireInterval();
+        attackMoveTimer = 0f;
         currentState = EnemyState.PAINT;
         setSpawnPosition(floorGrid);
         position.set(spawnPosition);
@@ -214,6 +232,7 @@ public class EnemyCpu3D implements Disposable {
         respawnTimer = 0f;
         invincibleTimer = 0f;
         fireCooldownRemaining = getFireInterval();
+        attackMoveTimer = 0f;
         currentState = EnemyState.PAINT;
         setSpawnPosition(floorGrid, stageConfig);
         position.set(spawnPosition);
@@ -288,6 +307,23 @@ public class EnemyCpu3D implements Disposable {
         fireCooldownRemaining += getFireInterval();
     }
 
+    public Vector3 buildShotDirection(Vector3 outputDirection) {
+        outputDirection.set(facingDirection.x, 0f, facingDirection.z);
+        if (outputDirection.isZero(0.0001f)) {
+            outputDirection.set(moveDirection.x, 0f, moveDirection.z);
+        }
+        if (outputDirection.isZero(0.0001f)) {
+            outputDirection.set(0f, 0f, -1f);
+        }
+
+        outputDirection.nor();
+        float spreadDegrees = difficulty.getAimSpreadDegrees();
+        if (spreadDegrees > 0.001f) {
+            outputDirection.rotate(Vector3.Y, MathUtils.random(-spreadDegrees, spreadDegrees));
+        }
+        return outputDirection.nor();
+    }
+
     public CpuDifficulty3D getDifficulty() {
         return difficulty;
     }
@@ -327,6 +363,7 @@ public class EnemyCpu3D implements Disposable {
         splatted = false;
         invincibleTimer = INVINCIBLE_SECONDS;
         fireCooldownRemaining = getFireInterval();
+        attackMoveTimer = 0f;
         currentState = EnemyState.PAINT;
         chooseDirectionTowardCenter();
         updateTransform();
@@ -361,31 +398,19 @@ public class EnemyCpu3D implements Disposable {
             targetDirection.nor();
         }
 
-        float aimAlpha = Math.min(1f, difficulty.getAimAccuracy() * delta);
+        float aimAlpha = Math.min(1f, difficulty.getAimTurnSpeed() * delta);
         facingDirection.lerp(targetDirection, aimAlpha).nor();
 
         float deltaX = targetPosition.x - position.x;
         float deltaZ = targetPosition.z - position.z;
         float distanceToTarget = (float) Math.sqrt(deltaX * deltaX + deltaZ * deltaZ);
 
-        if (distanceToTarget < RETREAT_RANGE) {
-            retreatDirection.set(targetDirection).scl(-1f);
-            moveDirection.set(retreatDirection).nor();
-            return;
+        attackMoveTimer -= delta;
+        if (attackMoveTimer <= 0f) {
+            chooseAttackMoveMode(distanceToTarget);
         }
 
-        if (distanceToTarget > APPROACH_RANGE) {
-            moveDirection.set(targetDirection).nor();
-            return;
-        }
-
-        // In the middle range, drift sideways a little so the enemy still looks alive while aiming.
-        sidestepDirection.set(-targetDirection.z, 0f, targetDirection.x);
-        if (sidestepDirection.isZero(0.0001f)) {
-            moveDirection.set(targetDirection).nor();
-        } else {
-            moveDirection.set(sidestepDirection).nor();
-        }
+        updateAttackMoveDirection(distanceToTarget);
     }
 
     private void setSpawnPosition(FloorGrid3D floorGrid) {
@@ -442,6 +467,98 @@ public class EnemyCpu3D implements Disposable {
             moveDirection.set(newDirection).nor();
         }
         directionChangeTimer = MathUtils.random(DIRECTION_CHANGE_MIN_SECONDS, DIRECTION_CHANGE_MAX_SECONDS);
+    }
+
+    private void chooseAttackMoveMode(float distanceToTarget) {
+        float random = MathUtils.random();
+        float paintChance = difficulty.getPaintBehaviorChance();
+
+        if (distanceToTarget < RETREAT_RANGE) {
+            currentAttackMoveMode = random < 0.55f ? AttackMoveMode.RETREAT : getRandomStrafeMode();
+        } else if (distanceToTarget > APPROACH_RANGE) {
+            if (random < 0.62f) {
+                currentAttackMoveMode = AttackMoveMode.APPROACH;
+            } else if (random < 0.62f + paintChance) {
+                currentAttackMoveMode = AttackMoveMode.PAINT;
+            } else {
+                currentAttackMoveMode = getRandomStrafeMode();
+            }
+        } else {
+            if (random < paintChance) {
+                currentAttackMoveMode = AttackMoveMode.PAINT;
+            } else if (random < 0.58f) {
+                currentAttackMoveMode = getRandomStrafeMode();
+            } else if (random < 0.8f) {
+                currentAttackMoveMode = AttackMoveMode.APPROACH;
+            } else {
+                currentAttackMoveMode = AttackMoveMode.RETREAT;
+            }
+        }
+
+        attackMoveTimer = MathUtils.random(
+            difficulty.getAttackDecisionMinSeconds(),
+            difficulty.getAttackDecisionMaxSeconds()
+        );
+    }
+
+    private AttackMoveMode getRandomStrafeMode() {
+        return MathUtils.randomBoolean() ? AttackMoveMode.STRAFE_LEFT : AttackMoveMode.STRAFE_RIGHT;
+    }
+
+    private void updateAttackMoveDirection(float distanceToTarget) {
+        switch (currentAttackMoveMode) {
+            case RETREAT:
+                retreatDirection.set(targetDirection).scl(-1f);
+                applyAttackDirection(retreatDirection, ATTACK_DIRECTION_JITTER_DEGREES);
+                break;
+            case APPROACH:
+                applyAttackDirection(targetDirection, ATTACK_DIRECTION_JITTER_DEGREES);
+                break;
+            case STRAFE_LEFT:
+                sidestepDirection.set(-targetDirection.z, 0f, targetDirection.x);
+                if (distanceToTarget < (RETREAT_RANGE + APPROACH_RANGE) * 0.5f) {
+                    sidestepDirection.mulAdd(targetDirection, -ATTACK_STRAFE_BACKWARD_BLEND);
+                } else {
+                    sidestepDirection.mulAdd(targetDirection, ATTACK_STRAFE_FORWARD_BLEND);
+                }
+                applyAttackDirection(sidestepDirection, ATTACK_DIRECTION_JITTER_DEGREES * 0.6f);
+                break;
+            case STRAFE_RIGHT:
+                sidestepDirection.set(targetDirection.z, 0f, -targetDirection.x);
+                if (distanceToTarget < (RETREAT_RANGE + APPROACH_RANGE) * 0.5f) {
+                    sidestepDirection.mulAdd(targetDirection, -ATTACK_STRAFE_BACKWARD_BLEND);
+                } else {
+                    sidestepDirection.mulAdd(targetDirection, ATTACK_STRAFE_FORWARD_BLEND);
+                }
+                applyAttackDirection(sidestepDirection, ATTACK_DIRECTION_JITTER_DEGREES * 0.6f);
+                break;
+            case PAINT:
+                attackMoveDirection.set(targetDirection);
+                float paintAngle = MathUtils.randomBoolean()
+                    ? MathUtils.random(ATTACK_PAINT_WANDER_MIN_DEGREES, ATTACK_PAINT_WANDER_MAX_DEGREES)
+                    : -MathUtils.random(ATTACK_PAINT_WANDER_MIN_DEGREES, ATTACK_PAINT_WANDER_MAX_DEGREES);
+                attackMoveDirection.rotate(Vector3.Y, paintAngle);
+                applyAttackDirection(attackMoveDirection, ATTACK_DIRECTION_JITTER_DEGREES);
+                break;
+            default:
+                applyAttackDirection(targetDirection, ATTACK_DIRECTION_JITTER_DEGREES);
+                break;
+        }
+    }
+
+    private void applyAttackDirection(Vector3 baseDirection, float extraJitterDegrees) {
+        attackMoveDirection.set(baseDirection.x, 0f, baseDirection.z);
+        if (attackMoveDirection.isZero(0.0001f)) {
+            attackMoveDirection.set(targetDirection.x, 0f, targetDirection.z);
+        }
+        if (attackMoveDirection.isZero(0.0001f)) {
+            attackMoveDirection.set(0f, 0f, -1f);
+        }
+        attackMoveDirection.nor();
+        if (extraJitterDegrees > 0.001f) {
+            attackMoveDirection.rotate(Vector3.Y, MathUtils.random(-extraJitterDegrees, extraJitterDegrees));
+        }
+        moveDirection.set(attackMoveDirection).nor();
     }
 
     private void updateTransform() {

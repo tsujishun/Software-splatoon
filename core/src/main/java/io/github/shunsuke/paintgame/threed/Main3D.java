@@ -151,6 +151,7 @@ public class Main3D implements ApplicationListener {
     private final Vector3 projectedCpuMarker = new Vector3();
     private final Vector3 projectedMarkerForward = new Vector3();
     private final Vector3 minimapFacingDirection = new Vector3();
+    private final Vector3 cpuShotDirection = new Vector3();
 
     private GameFlowState flowState;
     private TitleMenuScreen titleMenuScreen;
@@ -1360,7 +1361,7 @@ public class Main3D implements ApplicationListener {
                 audioManager.playEnemyShoot();
                 bullets.add(new Bullet3D(
                     cpuCharacter.getPosition(),
-                    cpuCharacter.getFacingDirection(),
+                    cpuCharacter.buildShotDirection(cpuShotDirection),
                     cpuCharacter.getWeaponConfig(),
                     cpuCharacter.getTeam().getBulletOwnerType(),
                     cpuCharacter.getTeam().getPaintCellState()
