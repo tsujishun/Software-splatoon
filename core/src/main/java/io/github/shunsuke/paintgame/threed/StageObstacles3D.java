@@ -23,16 +23,31 @@ public class StageObstacles3D implements Disposable {
     private static final float CLIMB_HINT_HEIGHT = 0.3f;
     private static final float CLIMB_HINT_WIDTH = 0.16f;
     private static final float CLIMB_HINT_Y_OFFSET = 0.22f;
-    private static final Color OBSTACLE_COLOR = new Color(0.34f, 0.4f, 0.48f, 1f);
-    private static final Color PLATFORM_TOP_COLOR = new Color(0.68f, 0.72f, 0.8f, 1f);
+    private static final float PERIMETER_WALL_HEIGHT = 0.72f;
+    private static final float PERIMETER_WALL_THICKNESS = 0.38f;
+    private static final float SPAWN_PAD_HEIGHT = 0.08f;
+    private static final float SPAWN_PAD_RADIUS = 0.62f;
+    private static final float SPAWN_PAD_CENTER_RADIUS = 0.28f;
+    private static final Color OBSTACLE_COLOR = new Color(0.31f, 0.37f, 0.46f, 1f);
+    private static final Color CLIMBABLE_WALL_COLOR = new Color(0.42f, 0.48f, 0.58f, 1f);
+    private static final Color PLATFORM_TOP_COLOR = new Color(0.76f, 0.81f, 0.88f, 1f);
     private static final Color PLAYER_PAINTED_OBSTACLE_COLOR = new Color(0.12f, 0.78f, 1f, 1f);
     private static final Color PLAYER_PAINTED_TOP_COLOR = new Color(0.62f, 0.94f, 1f, 1f);
     private static final Color ENEMY_PAINTED_OBSTACLE_COLOR = new Color(0.98f, 0.35f, 0.62f, 1f);
     private static final Color ENEMY_PAINTED_TOP_COLOR = new Color(1f, 0.76f, 0.86f, 1f);
     private static final Color CLIMB_HINT_COLOR = new Color(0.92f, 0.98f, 1f, 0.95f);
+    private static final Color CLIMB_HINT_IDLE_COLOR = new Color(0.7f, 0.78f, 0.88f, 1f);
+    private static final Color CLIMB_HINT_ENEMY_COLOR = new Color(1f, 0.72f, 0.84f, 1f);
+    private static final Color PERIMETER_WALL_COLOR = new Color(0.18f, 0.22f, 0.28f, 1f);
+    private static final Color PERIMETER_WALL_CAP_COLOR = new Color(0.46f, 0.54f, 0.64f, 1f);
+    private static final Color PLAYER_SPAWN_PAD_COLOR = new Color(0.11f, 0.56f, 0.8f, 1f);
+    private static final Color PLAYER_SPAWN_PAD_CENTER_COLOR = new Color(0.72f, 0.94f, 1f, 1f);
+    private static final Color ENEMY_SPAWN_PAD_COLOR = new Color(0.8f, 0.26f, 0.5f, 1f);
+    private static final Color ENEMY_SPAWN_PAD_CENTER_COLOR = new Color(1f, 0.8f, 0.88f, 1f);
     private static final float PLATFORM_HEIGHT_EPSILON = 0.04f;
 
     private final Array<Obstacle3D> obstacles = new Array<>();
+    private final Array<Decoration3D> decorations = new Array<>();
 
     public StageObstacles3D(StageConfig3D stageConfig) {
         for (StageConfig3D.ObstacleSpec obstacleSpec : stageConfig.getObstacleSpecs()) {
@@ -45,6 +60,8 @@ public class StageObstacles3D implements Disposable {
                 obstacleSpec.isStandable()
             );
         }
+        addPerimeterDecorations(stageConfig);
+        addSpawnPadDecorations(stageConfig);
     }
 
     public void render(ModelBatch modelBatch, Environment environment) {
@@ -56,6 +73,9 @@ public class StageObstacles3D implements Disposable {
             if (shouldRenderClimbHint(obstacle)) {
                 modelBatch.render(obstacle.climbHintInstance, environment);
             }
+        }
+        for (Decoration3D decoration : decorations) {
+            modelBatch.render(decoration.instance, environment);
         }
     }
 
@@ -222,6 +242,9 @@ public class StageObstacles3D implements Disposable {
                 obstacle.climbHintModel.dispose();
             }
         }
+        for (Decoration3D decoration : decorations) {
+            decoration.model.dispose();
+        }
     }
 
     private void addObstacle(float centerX, float centerZ, float width, float depth, float height, boolean standable) {
@@ -266,7 +289,7 @@ public class StageObstacles3D implements Disposable {
 
         float halfWidth = width / 2f;
         float halfDepth = depth / 2f;
-        obstacles.add(new Obstacle3D(
+        Obstacle3D obstacle = new Obstacle3D(
             model,
             instance,
             topPlateModel,
@@ -279,11 +302,13 @@ public class StageObstacles3D implements Disposable {
             centerZ + halfDepth,
             height,
             standable
-        ));
+        );
+        obstacles.add(obstacle);
+        updateObstacleColor(obstacle);
     }
 
     private void updateObstacleColor(Obstacle3D obstacle) {
-        obstacle.instance.materials.get(0).set(ColorAttribute.createDiffuse(getObstacleBodyColor(obstacle.paintCellState)));
+        obstacle.instance.materials.get(0).set(ColorAttribute.createDiffuse(getObstacleBodyColor(obstacle)));
         if (obstacle.topPlateInstance != null) {
             obstacle.topPlateInstance.materials.get(0).set(ColorAttribute.createDiffuse(getObstacleTopColor(obstacle.paintCellState)));
         }
@@ -292,14 +317,15 @@ public class StageObstacles3D implements Disposable {
         }
     }
 
-    private Color getObstacleBodyColor(int paintCellState) {
+    private Color getObstacleBodyColor(Obstacle3D obstacle) {
+        int paintCellState = obstacle.paintCellState;
         if (paintCellState == FloorGrid3D.CELL_STATE_PLAYER) {
             return PLAYER_PAINTED_OBSTACLE_COLOR;
         }
         if (paintCellState == FloorGrid3D.CELL_STATE_ENEMY) {
             return ENEMY_PAINTED_OBSTACLE_COLOR;
         }
-        return OBSTACLE_COLOR;
+        return obstacle.standable ? OBSTACLE_COLOR : CLIMBABLE_WALL_COLOR;
     }
 
     private Color getObstacleTopColor(int paintCellState) {
@@ -316,7 +342,76 @@ public class StageObstacles3D implements Disposable {
         if (paintCellState == FloorGrid3D.CELL_STATE_PLAYER) {
             return CLIMB_HINT_COLOR;
         }
-        return OBSTACLE_COLOR;
+        if (paintCellState == FloorGrid3D.CELL_STATE_ENEMY) {
+            return CLIMB_HINT_ENEMY_COLOR;
+        }
+        return CLIMB_HINT_IDLE_COLOR;
+    }
+
+    private void addPerimeterDecorations(StageConfig3D stageConfig) {
+        float halfWidth = stageConfig.getColumns() / 2f;
+        float halfDepth = stageConfig.getRows() / 2f;
+        float wallY = PERIMETER_WALL_HEIGHT / 2f - 0.02f;
+        float horizontalLength = stageConfig.getColumns() + PERIMETER_WALL_THICKNESS * 2f;
+        float verticalLength = stageConfig.getRows() + PERIMETER_WALL_THICKNESS * 2f;
+        float capHeight = 0.06f;
+
+        addDecorationBox(0f, wallY, -halfDepth - PERIMETER_WALL_THICKNESS / 2f, horizontalLength, PERIMETER_WALL_HEIGHT, PERIMETER_WALL_THICKNESS, PERIMETER_WALL_COLOR);
+        addDecorationBox(0f, wallY, halfDepth + PERIMETER_WALL_THICKNESS / 2f, horizontalLength, PERIMETER_WALL_HEIGHT, PERIMETER_WALL_THICKNESS, PERIMETER_WALL_COLOR);
+        addDecorationBox(-halfWidth - PERIMETER_WALL_THICKNESS / 2f, wallY, 0f, PERIMETER_WALL_THICKNESS, PERIMETER_WALL_HEIGHT, verticalLength, PERIMETER_WALL_COLOR);
+        addDecorationBox(halfWidth + PERIMETER_WALL_THICKNESS / 2f, wallY, 0f, PERIMETER_WALL_THICKNESS, PERIMETER_WALL_HEIGHT, verticalLength, PERIMETER_WALL_COLOR);
+
+        addDecorationBox(0f, PERIMETER_WALL_HEIGHT - capHeight / 2f, -halfDepth - PERIMETER_WALL_THICKNESS / 2f, horizontalLength, capHeight, PERIMETER_WALL_THICKNESS + 0.02f, PERIMETER_WALL_CAP_COLOR);
+        addDecorationBox(0f, PERIMETER_WALL_HEIGHT - capHeight / 2f, halfDepth + PERIMETER_WALL_THICKNESS / 2f, horizontalLength, capHeight, PERIMETER_WALL_THICKNESS + 0.02f, PERIMETER_WALL_CAP_COLOR);
+        addDecorationBox(-halfWidth - PERIMETER_WALL_THICKNESS / 2f, PERIMETER_WALL_HEIGHT - capHeight / 2f, 0f, PERIMETER_WALL_THICKNESS + 0.02f, capHeight, verticalLength, PERIMETER_WALL_CAP_COLOR);
+        addDecorationBox(halfWidth + PERIMETER_WALL_THICKNESS / 2f, PERIMETER_WALL_HEIGHT - capHeight / 2f, 0f, PERIMETER_WALL_THICKNESS + 0.02f, capHeight, verticalLength, PERIMETER_WALL_CAP_COLOR);
+    }
+
+    private void addSpawnPadDecorations(StageConfig3D stageConfig) {
+        addSpawnPad(stageConfig.getPlayerSpawnX(), stageConfig.getPlayerSpawnZ(), PLAYER_SPAWN_PAD_COLOR, PLAYER_SPAWN_PAD_CENTER_COLOR);
+        for (int i = 0; i < stageConfig.getCpuSpawnCount(); i++) {
+            boolean playerTeamSpawn = i == 0;
+            addSpawnPad(
+                stageConfig.getCpuSpawnX(i),
+                stageConfig.getCpuSpawnZ(i),
+                playerTeamSpawn ? PLAYER_SPAWN_PAD_COLOR : ENEMY_SPAWN_PAD_COLOR,
+                playerTeamSpawn ? PLAYER_SPAWN_PAD_CENTER_COLOR : ENEMY_SPAWN_PAD_CENTER_COLOR
+            );
+        }
+    }
+
+    private void addSpawnPad(float centerX, float centerZ, Color outerColor, Color centerColor) {
+        addDecorationCylinder(centerX, SPAWN_PAD_HEIGHT / 2f - 0.04f, centerZ, SPAWN_PAD_RADIUS, SPAWN_PAD_HEIGHT, outerColor);
+        addDecorationCylinder(centerX, SPAWN_PAD_HEIGHT * 0.72f, centerZ, SPAWN_PAD_CENTER_RADIUS, SPAWN_PAD_HEIGHT * 0.5f, centerColor);
+    }
+
+    private void addDecorationBox(float centerX, float centerY, float centerZ, float width, float height, float depth, Color color) {
+        ModelBuilder modelBuilder = new ModelBuilder();
+        Model model = modelBuilder.createBox(
+            width,
+            height,
+            depth,
+            new Material(ColorAttribute.createDiffuse(color)),
+            Usage.Position | Usage.Normal
+        );
+        ModelInstance instance = new ModelInstance(model);
+        instance.transform.setToTranslation(centerX, centerY, centerZ);
+        decorations.add(new Decoration3D(model, instance));
+    }
+
+    private void addDecorationCylinder(float centerX, float centerY, float centerZ, float radius, float height, Color color) {
+        ModelBuilder modelBuilder = new ModelBuilder();
+        Model model = modelBuilder.createCylinder(
+            radius * 2f,
+            height,
+            radius * 2f,
+            24,
+            new Material(ColorAttribute.createDiffuse(color)),
+            Usage.Position | Usage.Normal
+        );
+        ModelInstance instance = new ModelInstance(model);
+        instance.transform.setToTranslation(centerX, centerY, centerZ);
+        decorations.add(new Decoration3D(model, instance));
     }
 
     private boolean isWalkableForPlayer(Obstacle3D obstacle) {
@@ -324,7 +419,7 @@ public class StageObstacles3D implements Disposable {
     }
 
     private boolean shouldRenderClimbHint(Obstacle3D obstacle) {
-        return obstacle.climbHintInstance != null && obstacle.paintCellState == FloorGrid3D.CELL_STATE_PLAYER;
+        return obstacle.climbHintInstance != null;
     }
 
     private boolean overlapsCircle(Obstacle3D obstacle, float centerX, float centerZ, float radius) {
@@ -393,6 +488,16 @@ public class StageObstacles3D implements Disposable {
             this.topY = topY;
             this.standable = standable;
             this.paintCellState = FloorGrid3D.CELL_STATE_EMPTY;
+        }
+    }
+
+    private static class Decoration3D {
+        private final Model model;
+        private final ModelInstance instance;
+
+        private Decoration3D(Model model, ModelInstance instance) {
+            this.model = model;
+            this.instance = instance;
         }
     }
 }

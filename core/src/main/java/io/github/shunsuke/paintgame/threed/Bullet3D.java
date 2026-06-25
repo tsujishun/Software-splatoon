@@ -36,13 +36,17 @@ public class Bullet3D implements Disposable {
     private final Model model;
     private final ModelInstance instance;
     private final Vector3 position = new Vector3();
+    private final Vector3 previousPosition = new Vector3();
     private final Vector3 direction = new Vector3();
+    private final Vector3 impactPosition = new Vector3();
     private final WeaponConfig3D weaponConfig;
     private final int ownerType;
     private final int paintCellState;
     private final float collisionRadius;
+    private final Color visualColor;
 
     private float traveledDistance;
+    private boolean surfaceImpactPending;
 
     public Bullet3D(
         Vector3 playerPosition,
@@ -67,6 +71,7 @@ public class Bullet3D implements Disposable {
         this.ownerType = ownerType;
         this.paintCellState = paintCellState;
         this.collisionRadius = Math.max(bulletWidth, bulletDepth) / 2f;
+        this.visualColor = new Color(getBulletColor(paintCellState));
 
         // Only use the horizontal part of the aim so the bullet stays on the floor plane for now.
         direction.set(facingDirection.x, 0f, facingDirection.z);
@@ -80,10 +85,15 @@ public class Bullet3D implements Disposable {
             playerPosition.y + SPAWN_HEIGHT_OFFSET,
             playerPosition.z + direction.z * SPAWN_FORWARD_OFFSET
         );
+        previousPosition.set(position);
+        impactPosition.set(position);
+        surfaceImpactPending = false;
         updateTransform();
     }
 
     public boolean update(float delta, FloorGrid3D floorGrid, StageObstacles3D stageObstacles) {
+        previousPosition.set(position);
+        surfaceImpactPending = false;
         float moveDistance = weaponConfig.getBulletSpeed() * delta;
         float paintStepDistance = Math.max(0.05f, weaponConfig.getPaintRadius() * 0.5f);
         int stepCount = Math.max(1, (int) Math.ceil(moveDistance / paintStepDistance));
@@ -99,6 +109,8 @@ public class Bullet3D implements Disposable {
 
             if (stageObstacles.collidesCircle(nextX, nextZ, collisionRadius)) {
                 stageObstacles.paintObstacleAtWorldPosition(nextX, nextZ, collisionRadius, paintCellState);
+                impactPosition.set(nextX, position.y, nextZ);
+                surfaceImpactPending = true;
                 hitObstacle = true;
                 break;
             }
@@ -116,7 +128,13 @@ public class Bullet3D implements Disposable {
 
         updateTransform();
 
-        return traveledDistance < weaponConfig.getRange() && isInsideFloor && !hitObstacle;
+        boolean reachedRangeLimit = traveledDistance >= weaponConfig.getRange();
+        if (reachedRangeLimit && isInsideFloor && !hitObstacle) {
+            impactPosition.set(position);
+            surfaceImpactPending = true;
+        }
+
+        return !reachedRangeLimit && isInsideFloor && !hitObstacle;
     }
 
     public void render(ModelBatch modelBatch, Environment environment) {
@@ -127,12 +145,30 @@ public class Bullet3D implements Disposable {
         return position;
     }
 
+    public Vector3 getPreviousPosition() {
+        return previousPosition;
+    }
+
     public int getOwnerType() {
         return ownerType;
     }
 
     public int getPaintCellState() {
         return paintCellState;
+    }
+
+    public Color getVisualColor() {
+        return visualColor;
+    }
+
+    public boolean consumeSurfaceImpact(Vector3 outputPosition) {
+        if (!surfaceImpactPending) {
+            return false;
+        }
+
+        outputPosition.set(impactPosition);
+        surfaceImpactPending = false;
+        return true;
     }
 
     @Override

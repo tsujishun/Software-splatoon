@@ -69,6 +69,14 @@ public class EnemyCpu3D implements Disposable {
     private static final float NOSE_OFFSET_Y = 0.03f;
     private static final float NOSE_OFFSET_Z = -0.34f;
     private static final float MARKER_OFFSET_Y = 0.48f;
+    private static final float MOVE_BOB_SPEED = 9.5f;
+    private static final float MOVE_BOB_AMOUNT = 0.03f;
+    private static final float RECOIL_DURATION = 0.12f;
+    private static final float RECOIL_DISTANCE = 0.07f;
+    private static final float HIT_FLASH_DURATION = 0.16f;
+    private static final float RESPAWN_SCALE_BONUS = 0.07f;
+    private static final float RESPAWN_PULSE_DURATION = 0.42f;
+    private static final Color HIT_FLASH_COLOR = new Color(1f, 0.76f, 0.76f, 1f);
 
     private final Model bodyModel;
     private final Model headModel;
@@ -111,6 +119,10 @@ public class EnemyCpu3D implements Disposable {
     private boolean splatted;
     private float respawnTimer;
     private float invincibleTimer;
+    private float moveBobTimer;
+    private float moveBobStrength;
+    private float recoilTimer;
+    private float hitFlashTimer;
     private EnemyState currentState = EnemyState.PAINT;
     private AttackMoveMode currentAttackMoveMode = AttackMoveMode.APPROACH;
     private CpuDifficulty3D difficulty = CpuDifficulty3D.NORMAL;
@@ -181,6 +193,8 @@ public class EnemyCpu3D implements Disposable {
 
         float speedMultiplier = getGroundSpeedMultiplier(floorGrid.getCellStateAtWorldPosition(position.x, position.z));
         float moveSpeed = MOVE_SPEED * difficulty.getMoveSpeedMultiplier() * speedMultiplier;
+        float previousX = position.x;
+        float previousZ = position.z;
         nextPosition.set(position).mulAdd(moveDirection, moveSpeed * delta);
 
         float radius = ENEMY_DIAMETER / 2f;
@@ -199,6 +213,7 @@ public class EnemyCpu3D implements Disposable {
         if (currentState == EnemyState.PAINT) {
             facingDirection.set(moveDirection).nor();
         }
+        updateVisualTimers(delta, previousX, previousZ);
         updateTransform();
     }
 
@@ -219,6 +234,9 @@ public class EnemyCpu3D implements Disposable {
         invincibleTimer = 0f;
         fireCooldownRemaining = getFireInterval();
         attackMoveTimer = 0f;
+        moveBobStrength = 0f;
+        recoilTimer = 0f;
+        hitFlashTimer = 0f;
         currentState = EnemyState.PAINT;
         setSpawnPosition(floorGrid);
         position.set(spawnPosition);
@@ -233,6 +251,9 @@ public class EnemyCpu3D implements Disposable {
         invincibleTimer = 0f;
         fireCooldownRemaining = getFireInterval();
         attackMoveTimer = 0f;
+        moveBobStrength = 0f;
+        recoilTimer = 0f;
+        hitFlashTimer = 0f;
         currentState = EnemyState.PAINT;
         setSpawnPosition(floorGrid, stageConfig);
         position.set(spawnPosition);
@@ -287,6 +308,10 @@ public class EnemyCpu3D implements Disposable {
         return team;
     }
 
+    public float getBaseY() {
+        return position.y - ENEMY_DIAMETER / 2f;
+    }
+
     public String getDisplayName() {
         return displayName;
     }
@@ -305,6 +330,18 @@ public class EnemyCpu3D implements Disposable {
 
     public void consumeShotCooldown() {
         fireCooldownRemaining += getFireInterval();
+    }
+
+    public void triggerRecoil() {
+        if (!splatted) {
+            recoilTimer = RECOIL_DURATION;
+        }
+    }
+
+    public void triggerHitFlash() {
+        if (!splatted) {
+            hitFlashTimer = HIT_FLASH_DURATION;
+        }
     }
 
     public Vector3 buildShotDirection(Vector3 outputDirection) {
@@ -343,6 +380,8 @@ public class EnemyCpu3D implements Disposable {
     }
 
     private void updateTimers(float delta, FloorGrid3D floorGrid) {
+        recoilTimer = Math.max(0f, recoilTimer - delta);
+        hitFlashTimer = Math.max(0f, hitFlashTimer - delta);
         if (invincibleTimer > 0f) {
             invincibleTimer = Math.max(0f, invincibleTimer - delta);
         }
@@ -364,6 +403,9 @@ public class EnemyCpu3D implements Disposable {
         invincibleTimer = INVINCIBLE_SECONDS;
         fireCooldownRemaining = getFireInterval();
         attackMoveTimer = 0f;
+        moveBobStrength = 0f;
+        recoilTimer = 0f;
+        hitFlashTimer = 0f;
         currentState = EnemyState.PAINT;
         chooseDirectionTowardCenter();
         updateTransform();
@@ -563,21 +605,26 @@ public class EnemyCpu3D implements Disposable {
 
     private void updateTransform() {
         float facingAngleDegrees = MathUtils.atan2(facingDirection.x, -facingDirection.z) * MathUtils.radiansToDegrees;
+        float bobOffset = getMovementBobOffset();
+        float recoilOffsetZ = getRecoilOffsetZ();
+        float respawnScale = 1f + getRespawnScaleBonus();
         actorTransform.idt();
-        actorTransform.translate(position.x, position.y, position.z);
+        actorTransform.translate(position.x, position.y + bobOffset, position.z);
         actorTransform.rotate(Vector3.Y, facingAngleDegrees);
+        actorTransform.scale(respawnScale, respawnScale, respawnScale);
 
         setPartTransform(bodyInstance, 0f, BODY_OFFSET_Y, 0f);
         setPartTransform(headInstance, 0f, HEAD_OFFSET_Y, HEAD_OFFSET_Z);
-        setPartTransform(noseInstance, 0f, NOSE_OFFSET_Y, NOSE_OFFSET_Z);
+        setPartTransform(noseInstance, 0f, NOSE_OFFSET_Y, NOSE_OFFSET_Z + recoilOffsetZ);
         setPartTransform(markerInstance, 0f, MARKER_OFFSET_Y, 0f);
 
         float invincibleFlash = getInvincibleFlash();
-        setInstanceColor(bodyInstance, bodyTint.set(bodyBaseColor).lerp(Color.WHITE, invincibleFlash));
-        setInstanceColor(headInstance, headTint.set(headBaseColor).lerp(Color.WHITE, invincibleFlash));
-        setInstanceColor(noseInstance, noseTint.set(noseBaseColor).lerp(Color.WHITE, invincibleFlash * 0.5f));
+        float hitFlash = getHitFlashAmount();
+        setInstanceColor(bodyInstance, applyVisualTint(bodyTint, bodyBaseColor, invincibleFlash, hitFlash));
+        setInstanceColor(headInstance, applyVisualTint(headTint, headBaseColor, invincibleFlash, hitFlash * 0.8f));
+        setInstanceColor(noseInstance, applyVisualTint(noseTint, noseBaseColor, invincibleFlash * 0.5f, hitFlash));
         Color currentMarkerColor = currentState == EnemyState.ATTACK ? attackMarkerColor : markerBaseColor;
-        setInstanceColor(markerInstance, markerTint.set(currentMarkerColor).lerp(Color.WHITE, invincibleFlash));
+        setInstanceColor(markerInstance, applyVisualTint(markerTint, currentMarkerColor, invincibleFlash, hitFlash * 0.6f));
     }
 
     private void setPartTransform(ModelInstance partInstance, float offsetX, float offsetY, float offsetZ) {
@@ -593,6 +640,56 @@ public class EnemyCpu3D implements Disposable {
             return 0f;
         }
         return 0.25f + 0.28f * (0.5f + 0.5f * MathUtils.sin(invincibleTimer * 22f));
+    }
+
+    private Color applyVisualTint(Color tintTarget, Color baseColor, float invincibleFlash, float hitFlash) {
+        tintTarget.set(baseColor).lerp(Color.WHITE, invincibleFlash);
+        if (hitFlash > 0f) {
+            tintTarget.lerp(HIT_FLASH_COLOR, hitFlash);
+        }
+        return tintTarget;
+    }
+
+    private float getMovementBobOffset() {
+        if (moveBobStrength <= 0.001f || currentState == EnemyState.RESPAWN) {
+            return 0f;
+        }
+        return MathUtils.sin(moveBobTimer) * MOVE_BOB_AMOUNT * moveBobStrength;
+    }
+
+    private float getRecoilOffsetZ() {
+        if (recoilTimer <= 0f) {
+            return 0f;
+        }
+        return (recoilTimer / RECOIL_DURATION) * RECOIL_DISTANCE;
+    }
+
+    private float getHitFlashAmount() {
+        if (hitFlashTimer <= 0f) {
+            return 0f;
+        }
+        return hitFlashTimer / HIT_FLASH_DURATION;
+    }
+
+    private float getRespawnScaleBonus() {
+        float elapsedSinceRespawn = INVINCIBLE_SECONDS - invincibleTimer;
+        if (elapsedSinceRespawn < 0f || elapsedSinceRespawn > RESPAWN_PULSE_DURATION) {
+            return 0f;
+        }
+        float progress = elapsedSinceRespawn / RESPAWN_PULSE_DURATION;
+        return (1f - progress) * RESPAWN_SCALE_BONUS;
+    }
+
+    private void updateVisualTimers(float delta, float previousX, float previousZ) {
+        float movedDistanceSquared = (position.x - previousX) * (position.x - previousX)
+            + (position.z - previousZ) * (position.z - previousZ);
+        boolean movedThisFrame = movedDistanceSquared > 0.00004f;
+        if (movedThisFrame) {
+            moveBobTimer += delta * MOVE_BOB_SPEED;
+            moveBobStrength = Math.min(1f, moveBobStrength + delta * 6f);
+        } else {
+            moveBobStrength = Math.max(0f, moveBobStrength - delta * 7f);
+        }
     }
 
     private boolean moveWithObstacleCollision(

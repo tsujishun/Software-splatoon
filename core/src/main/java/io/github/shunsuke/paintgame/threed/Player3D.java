@@ -69,6 +69,14 @@ public class Player3D implements Disposable {
     private static final float NOSE_OFFSET_Z = -0.47f;
     private static final float PACK_OFFSET_Y = 0.03f;
     private static final float PACK_OFFSET_Z = 0.29f;
+    private static final float MOVE_BOB_SPEED = 11f;
+    private static final float MOVE_BOB_AMOUNT = 0.035f;
+    private static final float RECOIL_DURATION = 0.12f;
+    private static final float RECOIL_DISTANCE = 0.08f;
+    private static final float HIT_FLASH_DURATION = 0.16f;
+    private static final float RESPAWN_SCALE_BONUS = 0.08f;
+    private static final float RESPAWN_PULSE_DURATION = 0.42f;
+    private static final Color HIT_FLASH_COLOR = new Color(1f, 0.72f, 0.72f, 1f);
 
     private final Model bodyModel;
     private final Model canopyModel;
@@ -102,6 +110,10 @@ public class Player3D implements Disposable {
     private float verticalVelocity;
     private boolean grounded;
     private float climbTargetTopY;
+    private float moveBobTimer;
+    private float moveBobStrength;
+    private float recoilTimer;
+    private float hitFlashTimer;
 
     public Player3D() {
         ModelBuilder modelBuilder = new ModelBuilder();
@@ -212,6 +224,7 @@ public class Player3D implements Disposable {
         int groundStateAfterMove = getCurrentGroundCellState(floorGrid, stageObstacles);
         updateSwimmingState(swimInput, shootHeld, groundStateAfterMove);
         recoverInk(delta, groundStateAfterMove);
+        updateVisualTimers(delta, previousX, previousZ);
 
         updateTransform();
     }
@@ -250,6 +263,10 @@ public class Player3D implements Disposable {
         verticalVelocity = 0f;
         grounded = true;
         climbTargetTopY = 0f;
+        moveBobTimer = 0f;
+        moveBobStrength = 0f;
+        recoilTimer = 0f;
+        hitFlashTimer = 0f;
         updateTransform();
     }
 
@@ -273,6 +290,10 @@ public class Player3D implements Disposable {
 
     public float getHitRadius() {
         return HIT_RADIUS;
+    }
+
+    public float getCollisionRadius() {
+        return COLLISION_RADIUS;
     }
 
     public boolean isSplatted() {
@@ -353,6 +374,18 @@ public class Player3D implements Disposable {
         updateTransform();
     }
 
+    public void triggerRecoil() {
+        if (!splatted) {
+            recoilTimer = RECOIL_DURATION;
+        }
+    }
+
+    public void triggerHitFlash() {
+        if (!splatted) {
+            hitFlashTimer = HIT_FLASH_DURATION;
+        }
+    }
+
     public void tryJump() {
         if (splatted || swimming || !grounded) {
             return;
@@ -396,6 +429,9 @@ public class Player3D implements Disposable {
         verticalVelocity = 0f;
         grounded = true;
         climbTargetTopY = 0f;
+        moveBobStrength = 0f;
+        recoilTimer = 0f;
+        hitFlashTimer = 0f;
         updateTransform();
     }
 
@@ -406,22 +442,26 @@ public class Player3D implements Disposable {
         float heightScale = swimming ? SWIM_HEIGHT_SCALE : 1f;
         float widthScale = swimming ? SWIM_WIDTH_SCALE : 1f;
         float depthScale = swimming ? SWIM_DEPTH_SCALE : 1f;
-        float visualY = position.y - PLAYER_HEIGHT * (1f - heightScale) * 0.32f;
+        float respawnScale = 1f + getRespawnScaleBonus();
+        float movementBobOffset = getMovementBobOffset();
+        float recoilOffsetZ = getRecoilOffsetZ();
+        float visualY = position.y - PLAYER_HEIGHT * (1f - heightScale) * 0.32f + movementBobOffset;
         actorTransform.idt();
         actorTransform.translate(position.x, visualY, position.z);
         actorTransform.rotate(Vector3.Y, facingAngleDegrees);
-        actorTransform.scale(widthScale, heightScale, depthScale);
+        actorTransform.scale(widthScale * respawnScale, heightScale * respawnScale, depthScale * respawnScale);
 
         setPartTransform(bodyInstance, 0f, BODY_OFFSET_Y, 0f);
         setPartTransform(canopyInstance, 0f, CANOPY_OFFSET_Y, CANOPY_OFFSET_Z);
-        setPartTransform(noseInstance, 0f, NOSE_OFFSET_Y, NOSE_OFFSET_Z);
-        setPartTransform(packInstance, 0f, PACK_OFFSET_Y, PACK_OFFSET_Z);
+        setPartTransform(noseInstance, 0f, NOSE_OFFSET_Y, NOSE_OFFSET_Z + recoilOffsetZ);
+        setPartTransform(packInstance, 0f, PACK_OFFSET_Y, PACK_OFFSET_Z - recoilOffsetZ * 0.28f);
 
         float invincibleFlash = getInvincibleFlash();
-        setInstanceColor(bodyInstance, bodyTint.set(swimming ? SWIM_COLOR : PLAYER_COLOR).lerp(Color.WHITE, invincibleFlash));
-        setInstanceColor(canopyInstance, canopyTint.set(swimming ? SWIM_ACCENT_COLOR : PLAYER_ACCENT_COLOR).lerp(Color.WHITE, invincibleFlash));
-        setInstanceColor(noseInstance, noseTint.set(swimming ? SWIM_NOSE_COLOR : PLAYER_NOSE_COLOR).lerp(Color.WHITE, invincibleFlash * 0.6f));
-        setInstanceColor(packInstance, packTint.set(swimming ? SWIM_PACK_COLOR : PLAYER_PACK_COLOR).lerp(Color.WHITE, invincibleFlash));
+        float hitFlash = getHitFlashAmount();
+        setInstanceColor(bodyInstance, applyVisualTint(bodyTint, swimming ? SWIM_COLOR : PLAYER_COLOR, invincibleFlash, hitFlash));
+        setInstanceColor(canopyInstance, applyVisualTint(canopyTint, swimming ? SWIM_ACCENT_COLOR : PLAYER_ACCENT_COLOR, invincibleFlash, hitFlash * 0.8f));
+        setInstanceColor(noseInstance, applyVisualTint(noseTint, swimming ? SWIM_NOSE_COLOR : PLAYER_NOSE_COLOR, invincibleFlash * 0.6f, hitFlash));
+        setInstanceColor(packInstance, applyVisualTint(packTint, swimming ? SWIM_PACK_COLOR : PLAYER_PACK_COLOR, invincibleFlash, hitFlash * 0.75f));
     }
 
     private void setPartTransform(ModelInstance partInstance, float offsetX, float offsetY, float offsetZ) {
@@ -449,6 +489,44 @@ public class Player3D implements Disposable {
             return 0f;
         }
         return 0.28f + 0.3f * (0.5f + 0.5f * MathUtils.sin(invincibleTimer * 24f));
+    }
+
+    private Color applyVisualTint(Color tintTarget, Color baseColor, float invincibleFlash, float hitFlash) {
+        tintTarget.set(baseColor).lerp(Color.WHITE, invincibleFlash);
+        if (hitFlash > 0f) {
+            tintTarget.lerp(HIT_FLASH_COLOR, hitFlash);
+        }
+        return tintTarget;
+    }
+
+    private float getMovementBobOffset() {
+        if (moveBobStrength <= 0.001f || swimming || climbing) {
+            return 0f;
+        }
+        return MathUtils.sin(moveBobTimer) * MOVE_BOB_AMOUNT * moveBobStrength;
+    }
+
+    private float getRecoilOffsetZ() {
+        if (recoilTimer <= 0f) {
+            return 0f;
+        }
+        return (recoilTimer / RECOIL_DURATION) * RECOIL_DISTANCE;
+    }
+
+    private float getHitFlashAmount() {
+        if (hitFlashTimer <= 0f) {
+            return 0f;
+        }
+        return hitFlashTimer / HIT_FLASH_DURATION;
+    }
+
+    private float getRespawnScaleBonus() {
+        float elapsedSinceRespawn = INVINCIBLE_SECONDS - invincibleTimer;
+        if (elapsedSinceRespawn < 0f || elapsedSinceRespawn > RESPAWN_PULSE_DURATION) {
+            return 0f;
+        }
+        float progress = elapsedSinceRespawn / RESPAWN_PULSE_DURATION;
+        return (1f - progress) * RESPAWN_SCALE_BONUS;
     }
 
     private void moveWithObstacleCollision(float moveDistance, FloorGrid3D floorGrid, StageObstacles3D stageObstacles) {
@@ -668,7 +746,22 @@ public class Player3D implements Disposable {
         position.z = MathUtils.clamp(position.z, floorGrid.getMinZ() + PLAYER_DEPTH / 2f, floorGrid.getMaxZ() - PLAYER_DEPTH / 2f);
     }
 
-    private float getBaseY() {
+    public float getBaseY() {
         return position.y - GROUND_Y;
+    }
+
+    private void updateVisualTimers(float delta, float previousX, float previousZ) {
+        recoilTimer = Math.max(0f, recoilTimer - delta);
+        hitFlashTimer = Math.max(0f, hitFlashTimer - delta);
+
+        float movedDistanceSquared = (position.x - previousX) * (position.x - previousX)
+            + (position.z - previousZ) * (position.z - previousZ);
+        boolean isMovingForVisuals = grounded && !swimming && !climbing && movedDistanceSquared > 0.00004f;
+        if (isMovingForVisuals) {
+            moveBobTimer += delta * MOVE_BOB_SPEED;
+            moveBobStrength = Math.min(1f, moveBobStrength + delta * 7f);
+        } else {
+            moveBobStrength = Math.max(0f, moveBobStrength - delta * 8f);
+        }
     }
 }
