@@ -17,6 +17,7 @@ import com.badlogic.gdx.graphics.g3d.environment.DirectionalLight;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector3;
+import com.badlogic.gdx.utils.viewport.ScreenViewport;
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -36,28 +37,23 @@ public class Main3D implements ApplicationListener {
 
     private static final boolean DEBUG_MODE = false;
     private static final boolean ENABLE_CHARACTER_SHADOWS = true;
+    private static final String[] TITLE_MENU_ITEMS = {
+        "Start Game",
+        "Weapon Select",
+        "Stage Select",
+        "Difficulty",
+        "Controls"
+    };
+    private static final WeaponConfig3D[] TITLE_MENU_WEAPONS = {
+        WeaponConfig3D.BASIC_SHOOTER,
+        WeaponConfig3D.SHORT_PAINTER,
+        WeaponConfig3D.LONG_SHOOTER
+    };
     private static final String TITLE_TEXT = "Paint Battle 3D Prototype";
     private static final String TITLE_PROMPT_TEXT = "Use W/S or Up/Down, Enter to Select";
     private static final String STEP_TEXT = "Step 37: Team Arena & 2v2 Base";
-    private static final String TITLE_CONTROL_MOVE_TEXT = "WASD: Move";
-    private static final String TITLE_CONTROL_LOOK_TEXT = "Mouse: Look";
-    private static final String TITLE_CONTROL_SHOOT_TEXT = "Space: Shoot";
-    private static final String TITLE_CONTROL_WEAPON_TEXT = "1 / 2 / 3: Switch Weapon";
-    private static final String TITLE_CONTROL_STAGE_TEXT = "Stage Select: Training / Wide / Team";
-    private static final String TITLE_CONTROL_JUMP_TEXT = "J: Jump / Wall Jump";
-    private static final String TITLE_CONTROL_SWIM_TEXT = "Shift: Swim on floor / Climb painted walls";
-    private static final String TITLE_CONTROL_RETURN_TEXT = "R: Return to Title";
-    private static final String TITLE_CONTROL_PAUSE_TEXT = "Esc: Pause / Release Mouse";
-    private static final String TITLE_CONTROL_MUTE_TEXT = "M: Mute";
-    private static final String TITLE_CONTROL_BACK_TEXT = "Esc / Backspace: Back";
-    private static final String PLAY_TEXT = "WASD: Move relative to the camera";
-    private static final String CAMERA_CONTROL_TEXT = "Move the mouse to control the camera";
-    private static final String SHOOT_TEXT = "Space: Shoot in the camera direction";
-    private static final String WEAPON_SWITCH_TEXT = "1 / 2 / 3: Switch weapon";
-    private static final String PAUSE_TEXT = "Esc: Pause and release the mouse";
     private static final String DEBUG_PAINT_TEXT = "T: Switch paint color (debug)";
     private static final String RETURN_TEXT = "R: Return to Title";
-    private static final String PAUSE_RESUME_TEXT = "Press Esc or Enter to resume";
     private static final float COUNTDOWN_TOTAL_SECONDS = 4f;
     // Lower this during playtests if you want faster balance checks.
     private static final float GAME_DURATION_SECONDS = 60f;
@@ -101,8 +97,6 @@ public class Main3D implements ApplicationListener {
     private static final float CENTER_TIME_PANEL_HEIGHT = 42f;
     private static final float BOTTOM_INFO_PANEL_WIDTH = 240f;
     private static final float BOTTOM_INFO_PANEL_HEIGHT = 114f;
-    private static final float RESULT_PANEL_WIDTH = 460f;
-    private static final float RESULT_PANEL_HEIGHT = 290f;
     private static final int MAX_INK_PARTICLES = 96;
     private static final int IMPACT_PARTICLE_COUNT = 7;
     private static final float IMPACT_PARTICLE_MIN_LIFETIME = 0.22f;
@@ -150,10 +144,12 @@ public class Main3D implements ApplicationListener {
     private Environment environment;
     private PerspectiveCamera worldCamera;
     private OrthographicCamera hudCamera;
+    private ScreenViewport hudViewport;
     private SpriteBatch spriteBatch;
     private ShapeRenderer shapeRenderer;
     private BitmapFont font;
     private GlyphLayout glyphLayout;
+    private MenuUi3D menuUi;
     private AudioManager3D audioManager;
     private FloorGrid3D floorGrid;
     private StageObstacles3D stageObstacles;
@@ -232,6 +228,7 @@ public class Main3D implements ApplicationListener {
         font = new BitmapFont();
         font.setColor(Color.WHITE);
         glyphLayout = new GlyphLayout();
+        menuUi = new MenuUi3D(spriteBatch, shapeRenderer, font, glyphLayout);
         audioManager = new AudioManager3D();
         audioManager.playTitleBgm();
 
@@ -302,8 +299,12 @@ public class Main3D implements ApplicationListener {
 
         if (hudCamera == null) {
             hudCamera = new OrthographicCamera();
+            hudViewport = new ScreenViewport(hudCamera);
         }
-        hudCamera.setToOrtho(false, width, height);
+        if (hudViewport == null) {
+            hudViewport = new ScreenViewport(hudCamera);
+        }
+        hudViewport.update(width, height, true);
     }
 
     @Override
@@ -340,9 +341,7 @@ public class Main3D implements ApplicationListener {
         drawCombatShapes();
         drawTeamMarkers();
         drawMinimap();
-        drawTitleMenuShapes();
-        drawResultScreenShapes();
-        spriteBatch.setProjectionMatrix(hudCamera.combined);
+        drawStateMenus();
         drawOverlay();
         drawCrosshair();
     }
@@ -605,145 +604,137 @@ public class Main3D implements ApplicationListener {
     }
 
     private void drawOverlay() {
+        if (flowState != GameFlowState.PLAYING) {
+            return;
+        }
+
+        spriteBatch.setProjectionMatrix(hudCamera.combined);
         spriteBatch.begin();
 
-        if (flowState == GameFlowState.TITLE) {
-            drawTitleMenu();
-        } else if (flowState == GameFlowState.COUNTDOWN) {
-            drawCenteredText(getCountdownText(), hudCamera.viewportHeight / 2f + 12f);
-            drawCenteredText("Controls are locked during the countdown.", hudCamera.viewportHeight / 2f - 18f);
-            drawCenteredText(RETURN_TEXT, hudCamera.viewportHeight / 2f - 48f);
-        } else if (flowState == GameFlowState.PLAYING) {
-            float playerPanelX = STATUS_BAR_MARGIN + 14f;
-            float playerPanelTop = hudCamera.viewportHeight - 28f;
-            float enemyPanelX = hudCamera.viewportWidth - TEAM_STATUS_PANEL_WIDTH - STATUS_BAR_MARGIN + 14f;
-            float enemyPanelTop = playerPanelTop;
-            float infoPanelX = STATUS_BAR_MARGIN + 16f;
-            float infoPanelY = WEAPON_PANEL_MARGIN + WEAPON_PANEL_HEIGHT + 14f;
+        float playerPanelX = STATUS_BAR_MARGIN + 14f;
+        float playerPanelTop = hudCamera.viewportHeight - 28f;
+        float enemyPanelX = hudCamera.viewportWidth - TEAM_STATUS_PANEL_WIDTH - STATUS_BAR_MARGIN + 14f;
+        float enemyPanelTop = playerPanelTop;
+        float infoPanelX = STATUS_BAR_MARGIN + 16f;
+        float infoPanelY = WEAPON_PANEL_MARGIN + WEAPON_PANEL_HEIGHT + 14f;
 
-            drawHudText("Player Team", playerPanelX, playerPanelTop, PLAYER_TEAM_MARKER_COLOR);
-            drawHudText(String.format("%d Tiles", floorGrid.getPlayerPaintedCellCount()), playerPanelX, playerPanelTop - 22f, Color.WHITE);
-            drawHudText(String.format("%.1f%% Paint", floorGrid.getPlayerPaintRatePercent()), playerPanelX, playerPanelTop - 42f, PLAYER_TEAM_MARKER_COLOR);
+        drawHudText("Player Team", playerPanelX, playerPanelTop, PLAYER_TEAM_MARKER_COLOR);
+        drawHudText(String.format("%d Tiles", floorGrid.getPlayerPaintedCellCount()), playerPanelX, playerPanelTop - 22f, Color.WHITE);
+        drawHudText(String.format("%.1f%% Paint", floorGrid.getPlayerPaintRatePercent()), playerPanelX, playerPanelTop - 42f, PLAYER_TEAM_MARKER_COLOR);
 
-            drawHudText("Enemy Team", enemyPanelX, enemyPanelTop, ENEMY_TEAM_MARKER_COLOR);
-            drawHudText(String.format("%d Tiles", floorGrid.getEnemyPaintedCellCount()), enemyPanelX, enemyPanelTop - 22f, Color.WHITE);
-            drawHudText(String.format("%.1f%% Paint", floorGrid.getEnemyPaintRatePercent()), enemyPanelX, enemyPanelTop - 42f, ENEMY_TEAM_MARKER_COLOR);
+        drawHudText("Enemy Team", enemyPanelX, enemyPanelTop, ENEMY_TEAM_MARKER_COLOR);
+        drawHudText(String.format("%d Tiles", floorGrid.getEnemyPaintedCellCount()), enemyPanelX, enemyPanelTop - 22f, Color.WHITE);
+        drawHudText(String.format("%.1f%% Paint", floorGrid.getEnemyPaintRatePercent()), enemyPanelX, enemyPanelTop - 42f, ENEMY_TEAM_MARKER_COLOR);
 
-            drawCenteredScaledTextWithShadow(String.format("%d", (int) Math.ceil(remainingTime)), hudCamera.viewportHeight - 18f, Color.WHITE, 1.1f);
-            drawCenteredText("Time", hudCamera.viewportHeight - 44f);
+        drawCenteredScaledTextWithShadow(String.format("%d", (int) Math.ceil(remainingTime)), hudCamera.viewportHeight - 18f, Color.WHITE, 1.1f);
+        drawCenteredText("Time", hudCamera.viewportHeight - 44f);
 
-            drawTopLeftText(String.format("HP %d / %d", player.getHp(), Player3D.MAX_HP), infoPanelX, infoPanelY + 88f);
-            drawTopLeftText(String.format("Ink %.0f / %.0f", player.getInkAmount(), Player3D.MAX_INK_AMOUNT), infoPanelX, infoPanelY + 66f);
-            drawTopLeftText(
-                "Mode: " + getPlayerModeLabel() + "   Ground: " + getGroundStateLabel(player.getPosition()),
-                infoPanelX,
-                infoPanelY + 44f
+        drawTopLeftText(String.format("HP %d / %d", player.getHp(), Player3D.MAX_HP), infoPanelX, infoPanelY + 88f);
+        drawTopLeftText(String.format("Ink %.0f / %.0f", player.getInkAmount(), Player3D.MAX_INK_AMOUNT), infoPanelX, infoPanelY + 66f);
+        drawTopLeftText(
+            "Mode: " + getPlayerModeLabel() + "   Ground: " + getGroundStateLabel(player.getPosition()),
+            infoPanelX,
+            infoPanelY + 44f
+        );
+        drawTopLeftText(String.format("Team Splats P / E: %d / %d", playerSplatCount, enemySplatCount), infoPanelX, infoPanelY + 24f);
+        drawTopLeftText(
+            String.format("Ally HP %d   Enemy HP %d / %d", allyCpu.getHp(), enemyCpuOne.getHp(), enemyCpuTwo.getHp()),
+            infoPanelX,
+            infoPanelY + 6f
+        );
+        if (DEBUG_MODE) {
+            drawTopLeftText(DEBUG_PAINT_TEXT, STATUS_BAR_MARGIN, hudCamera.viewportHeight - 92f);
+            drawTopLeftText("Current Color: " + getCurrentPaintColorLabel(), STATUS_BAR_MARGIN, hudCamera.viewportHeight - 114f);
+        }
+
+        drawWeaponHudText();
+
+        if (feedbackMessageTimer > 0f && feedbackMessageText != null && !feedbackMessageText.isEmpty()) {
+            drawCenteredTextWithShadow(feedbackMessageText, hudCamera.viewportHeight / 2f + 76f, feedbackMessageColor);
+        }
+        if (player.isSplatted()) {
+            drawCenteredTextWithShadow("Splatted!", hudCamera.viewportHeight / 2f + 26f, FEEDBACK_SPLAT_COLOR);
+            drawCenteredTextWithShadow(
+                String.format("Respawning... %.1f", player.getRespawnTimer()),
+                hudCamera.viewportHeight / 2f - 10f,
+                Color.WHITE
             );
-            drawTopLeftText(String.format("Team Splats P / E: %d / %d", playerSplatCount, enemySplatCount), infoPanelX, infoPanelY + 24f);
-            drawTopLeftText(
-                String.format("Ally HP %d   Enemy HP %d / %d", allyCpu.getHp(), enemyCpuOne.getHp(), enemyCpuTwo.getHp()),
-                infoPanelX,
-                infoPanelY + 6f
-            );
-            if (DEBUG_MODE) {
-                drawTopLeftText(DEBUG_PAINT_TEXT, STATUS_BAR_MARGIN, hudCamera.viewportHeight - 92f);
-                drawTopLeftText("Current Color: " + getCurrentPaintColorLabel(), STATUS_BAR_MARGIN, hudCamera.viewportHeight - 114f);
-            }
-
-            drawWeaponHudText();
-
-            if (feedbackMessageTimer > 0f && feedbackMessageText != null && !feedbackMessageText.isEmpty()) {
-                drawCenteredTextWithShadow(feedbackMessageText, hudCamera.viewportHeight / 2f + 76f, feedbackMessageColor);
-            }
-            if (player.isSplatted()) {
-                drawCenteredTextWithShadow("Splatted!", hudCamera.viewportHeight / 2f + 26f, FEEDBACK_SPLAT_COLOR);
-                drawCenteredTextWithShadow(
-                    String.format("Respawning... %.1f", player.getRespawnTimer()),
-                    hudCamera.viewportHeight / 2f - 10f,
-                    Color.WHITE
-                );
-            }
-        } else if (flowState == GameFlowState.PAUSED) {
-            drawTopLeftText(String.format("Player Paint: %d (%.1f%%)", floorGrid.getPlayerPaintedCellCount(), floorGrid.getPlayerPaintRatePercent()), 12f, hudCamera.viewportHeight - 40f);
-            drawTopLeftText(String.format("Enemy Paint: %d (%.1f%%)", floorGrid.getEnemyPaintedCellCount(), floorGrid.getEnemyPaintRatePercent()), 12f, hudCamera.viewportHeight - 62f);
-            drawTopLeftText(String.format("Player HP: %d / %d", player.getHp(), Player3D.MAX_HP), 12f, hudCamera.viewportHeight - 84f);
-            drawTopLeftText(String.format("Ink: %.0f / %.0f", player.getInkAmount(), Player3D.MAX_INK_AMOUNT), 12f, hudCamera.viewportHeight - 106f);
-            drawTopLeftText(String.format("Ally HP: %d   Enemy HP: %d / %d", allyCpu.getHp(), enemyCpuOne.getHp(), enemyCpuTwo.getHp()), 12f, hudCamera.viewportHeight - 128f);
-            drawTopLeftText("Weapon: " + playerWeapon.getName(), 12f, hudCamera.viewportHeight - 150f);
-            drawTopLeftText(String.format("Team Splats P / E: %d / %d", playerSplatCount, enemySplatCount), 12f, hudCamera.viewportHeight - 172f);
-            drawTopLeftText(String.format("Time: %d", (int) Math.ceil(remainingTime)), hudCamera.viewportWidth - 120f, hudCamera.viewportHeight - 12f);
-            drawCenteredText("Paused", hudCamera.viewportHeight / 2f + 24f);
-            drawCenteredText(PAUSE_RESUME_TEXT, hudCamera.viewportHeight / 2f - 8f);
-            drawCenteredText("M: Mute", hudCamera.viewportHeight / 2f - 40f);
-            drawCenteredText(RETURN_TEXT, hudCamera.viewportHeight / 2f - 72f);
-        } else if (flowState == GameFlowState.GAME_OVER) {
-            drawResultScreen();
         }
 
         spriteBatch.end();
     }
 
-    private void drawTitleMenu() {
-        float centerY = hudCamera.viewportHeight / 2f;
-        drawCenteredScaledTextWithShadow(TITLE_TEXT, centerY + 132f, Color.WHITE, 1.15f);
-        drawCenteredText(TITLE_PROMPT_TEXT, centerY + 100f);
-        drawCenteredText(STEP_TEXT, centerY + 74f);
-
-        if (titleMenuScreen == TitleMenuScreen.MAIN) {
-            drawCenteredText(getTitleMenuItemText(0, titleMenuIndex == 0), centerY + 40f);
-            drawCenteredText(getTitleMenuItemText(1, titleMenuIndex == 1), centerY + 14f);
-            drawCenteredText(getTitleMenuItemText(2, titleMenuIndex == 2), centerY - 12f);
-            drawCenteredText(getTitleMenuItemText(3, titleMenuIndex == 3), centerY - 38f);
-            drawCenteredText(getTitleMenuItemText(4, titleMenuIndex == 4), centerY - 64f);
-            drawCenteredText("Selected Weapon: " + selectedTitleWeapon.getName(), centerY - 110f);
-            drawCenteredText("Stage: " + selectedStageType.getDisplayName(), centerY - 136f);
-            drawCenteredText("Difficulty: " + selectedCpuDifficulty.getLabel(), centerY - 162f);
-            drawCenteredText(TITLE_CONTROL_MUTE_TEXT, centerY - 198f);
-            return;
-        }
-
-        if (titleMenuScreen == TitleMenuScreen.WEAPON_SELECT) {
-            drawCenteredScaledTextWithShadow("Weapon Select", centerY + 44f, FEEDBACK_HIT_COLOR, 1.1f);
-            drawCenteredText(getWeaponMenuItemText(0, weaponMenuIndex == 0), centerY + 6f);
-            drawCenteredText(getWeaponMenuItemText(1, weaponMenuIndex == 1), centerY - 20f);
-            drawCenteredText(getWeaponMenuItemText(2, weaponMenuIndex == 2), centerY - 46f);
-            drawCenteredText("Current Start Weapon: " + selectedTitleWeapon.getName(), centerY - 92f);
-            drawCenteredText(TITLE_CONTROL_BACK_TEXT, centerY - 134f);
-            return;
-        }
-
-        if (titleMenuScreen == TitleMenuScreen.STAGE_SELECT) {
-            drawCenteredScaledTextWithShadow("Stage Select", centerY + 44f, FEEDBACK_HIT_COLOR, 1.1f);
-            StageType3D[] stageTypes = StageType3D.values();
-            for (int i = 0; i < stageTypes.length; i++) {
-                drawCenteredText(getStageMenuItemText(i, stageMenuIndex == i), centerY + 6f - i * 26f);
+    private void drawStateMenus() {
+        if (flowState == GameFlowState.TITLE) {
+            if (titleMenuScreen == TitleMenuScreen.MAIN) {
+                menuUi.drawTitleMain(
+                    hudCamera,
+                    TITLE_TEXT,
+                    TITLE_PROMPT_TEXT,
+                    STEP_TEXT,
+                    TITLE_MENU_ITEMS,
+                    titleMenuIndex,
+                    selectedTitleWeapon.getName(),
+                    selectedStageType.getDisplayName(),
+                    selectedCpuDifficulty.getLabel()
+                );
+                return;
             }
-            drawCenteredText("Current Stage: " + selectedStageType.getDisplayName(), centerY - 78f);
-            drawCenteredText(TITLE_CONTROL_BACK_TEXT, centerY - 120f);
+
+            if (titleMenuScreen == TitleMenuScreen.WEAPON_SELECT) {
+                menuUi.drawWeaponSelect(hudCamera, TITLE_MENU_WEAPONS, weaponMenuIndex, selectedTitleWeapon);
+                return;
+            }
+
+            if (titleMenuScreen == TitleMenuScreen.STAGE_SELECT) {
+                menuUi.drawStageSelect(hudCamera, StageType3D.values(), stageMenuIndex, selectedStageType);
+                return;
+            }
+
+            if (titleMenuScreen == TitleMenuScreen.DIFFICULTY) {
+                menuUi.drawDifficultySelect(hudCamera, CpuDifficulty3D.values(), difficultyMenuIndex, selectedCpuDifficulty);
+                return;
+            }
+
+            menuUi.drawControls(hudCamera);
             return;
         }
 
-        if (titleMenuScreen == TitleMenuScreen.DIFFICULTY) {
-            drawCenteredScaledTextWithShadow("Difficulty", centerY + 44f, FEEDBACK_HIT_COLOR, 1.1f);
-            drawCenteredText(getDifficultyMenuItemText(0, difficultyMenuIndex == 0), centerY + 6f);
-            drawCenteredText(getDifficultyMenuItemText(1, difficultyMenuIndex == 1), centerY - 20f);
-            drawCenteredText(getDifficultyMenuItemText(2, difficultyMenuIndex == 2), centerY - 46f);
-            drawCenteredText("Current Difficulty: " + selectedCpuDifficulty.getLabel(), centerY - 92f);
-            drawCenteredText(TITLE_CONTROL_BACK_TEXT, centerY - 134f);
+        if (flowState == GameFlowState.COUNTDOWN) {
+            menuUi.drawCountdown(
+                hudCamera,
+                getCountdownText(),
+                "Controls are locked during the countdown.",
+                RETURN_TEXT
+            );
             return;
         }
 
-        drawCenteredScaledTextWithShadow("Controls", centerY + 58f, FEEDBACK_HIT_COLOR, 1.1f);
-        drawCenteredText(TITLE_CONTROL_MOVE_TEXT, centerY + 22f);
-        drawCenteredText(TITLE_CONTROL_LOOK_TEXT, centerY - 2f);
-        drawCenteredText(TITLE_CONTROL_SHOOT_TEXT, centerY - 26f);
-        drawCenteredText(TITLE_CONTROL_WEAPON_TEXT, centerY - 50f);
-        drawCenteredText(TITLE_CONTROL_STAGE_TEXT, centerY - 74f);
-        drawCenteredText(TITLE_CONTROL_JUMP_TEXT, centerY - 98f);
-        drawCenteredText(TITLE_CONTROL_SWIM_TEXT, centerY - 122f);
-        drawCenteredText(TITLE_CONTROL_PAUSE_TEXT, centerY - 146f);
-        drawCenteredText(TITLE_CONTROL_MUTE_TEXT, centerY - 170f);
-        drawCenteredText(TITLE_CONTROL_BACK_TEXT, centerY - 210f);
+        if (flowState == GameFlowState.PAUSED) {
+            menuUi.drawPause(hudCamera, new MenuUi3D.InfoRow[] {
+                new MenuUi3D.InfoRow("Player Paint", String.format("%d (%.1f%%)", floorGrid.getPlayerPaintedCellCount(), floorGrid.getPlayerPaintRatePercent()), PLAYER_TEAM_MARKER_COLOR),
+                new MenuUi3D.InfoRow("Enemy Paint", String.format("%d (%.1f%%)", floorGrid.getEnemyPaintedCellCount(), floorGrid.getEnemyPaintRatePercent()), ENEMY_TEAM_MARKER_COLOR),
+                new MenuUi3D.InfoRow("Player HP", String.format("%d / %d", player.getHp(), Player3D.MAX_HP)),
+                new MenuUi3D.InfoRow("Ink", String.format("%.0f / %.0f", player.getInkAmount(), Player3D.MAX_INK_AMOUNT)),
+                new MenuUi3D.InfoRow("Ally / Enemy HP", String.format("%d / %d / %d", allyCpu.getHp(), enemyCpuOne.getHp(), enemyCpuTwo.getHp())),
+                new MenuUi3D.InfoRow("Weapon", playerWeapon.getName(), PLAYER_TEAM_MARKER_COLOR),
+                new MenuUi3D.InfoRow("Team Splats", String.format("%d / %d", playerSplatCount, enemySplatCount)),
+                new MenuUi3D.InfoRow("Time", String.format("%d", (int) Math.ceil(remainingTime)))
+            });
+            return;
+        }
+
+        if (flowState == GameFlowState.GAME_OVER) {
+            menuUi.drawResult(hudCamera, resultText, new MenuUi3D.InfoRow[] {
+                new MenuUi3D.InfoRow("Player Team Tiles", String.valueOf(finalPlayerScore), PLAYER_TEAM_MARKER_COLOR),
+                new MenuUi3D.InfoRow("Enemy Team Tiles", String.valueOf(finalEnemyScore), ENEMY_TEAM_MARKER_COLOR),
+                new MenuUi3D.InfoRow("Player Paint Rate", String.format("%.1f%%", finalPlayerPaintRate), PLAYER_TEAM_MARKER_COLOR),
+                new MenuUi3D.InfoRow("Enemy Paint Rate", String.format("%.1f%%", finalEnemyPaintRate), ENEMY_TEAM_MARKER_COLOR),
+                new MenuUi3D.InfoRow("Player Team Splats", String.valueOf(finalPlayerSplats), PLAYER_TEAM_MARKER_COLOR),
+                new MenuUi3D.InfoRow("Enemy Team Splats", String.valueOf(finalEnemySplats), ENEMY_TEAM_MARKER_COLOR),
+                new MenuUi3D.InfoRow("Weapon", finalWeaponName)
+            }, "Enter: Retry", "R: Return to Title");
+        }
     }
 
     private void drawCenteredText(String text, float y) {
@@ -787,22 +778,6 @@ public class Main3D implements ApplicationListener {
         font.getData().setScale(scale);
         drawCenteredTextWithShadow(text, y, color);
         font.getData().setScale(previousScaleX, previousScaleY);
-    }
-
-    private void drawResultScreen() {
-        float centerY = hudCamera.viewportHeight / 2f;
-        drawCenteredScaledTextWithShadow("Game Over", centerY + 116f, Color.WHITE, 1.2f);
-        drawCenteredScaledTextWithShadow(resultText, centerY + 78f, FEEDBACK_SPLAT_COLOR, 1.45f);
-        drawCenteredText("Paint Result", centerY + 42f);
-        drawCenteredText(String.format("Player Team Tiles: %d", finalPlayerScore), centerY + 14f);
-        drawCenteredText(String.format("Enemy Team Tiles: %d", finalEnemyScore), centerY - 10f);
-        drawCenteredText(String.format("Player Team Paint Rate: %.1f%%", finalPlayerPaintRate), centerY - 38f);
-        drawCenteredText(String.format("Enemy Team Paint Rate: %.1f%%", finalEnemyPaintRate), centerY - 62f);
-        drawCenteredText(String.format("Player Team Splats: %d", finalPlayerSplats), centerY - 90f);
-        drawCenteredText(String.format("Enemy Team Splats: %d", finalEnemySplats), centerY - 114f);
-        drawCenteredText("Weapon: " + finalWeaponName, centerY - 142f);
-        drawCenteredText("Enter: Retry", centerY - 178f);
-        drawCenteredText("R: Return to Title", centerY - 202f);
     }
 
     private void drawCombatShapes() {
@@ -1048,56 +1023,6 @@ public class Main3D implements ApplicationListener {
         shapeRenderer.setColor(MINIMAP_BORDER_COLOR);
         shapeRenderer.rect(panelX, panelY, panelWidth, panelHeight);
         shapeRenderer.rect(mapX, mapY, mapWidth, mapHeight);
-        shapeRenderer.end();
-    }
-
-    private void drawResultScreenShapes() {
-        if (flowState != GameFlowState.GAME_OVER) {
-            return;
-        }
-
-        float panelX = (hudCamera.viewportWidth - RESULT_PANEL_WIDTH) / 2f;
-        float panelY = (hudCamera.viewportHeight - RESULT_PANEL_HEIGHT) / 2f - 36f;
-
-        shapeRenderer.setProjectionMatrix(hudCamera.combined);
-        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-        shapeRenderer.setColor(0f, 0f, 0f, 0.58f);
-        shapeRenderer.rect(panelX, panelY, RESULT_PANEL_WIDTH, RESULT_PANEL_HEIGHT);
-        shapeRenderer.setColor(0.1f, 0.14f, 0.18f, 0.82f);
-        shapeRenderer.rect(panelX + 10f, panelY + 10f, RESULT_PANEL_WIDTH - 20f, RESULT_PANEL_HEIGHT - 20f);
-        shapeRenderer.end();
-
-        shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
-        shapeRenderer.setColor(PANEL_BORDER_COLOR);
-        shapeRenderer.rect(panelX, panelY, RESULT_PANEL_WIDTH, RESULT_PANEL_HEIGHT);
-        shapeRenderer.rect(panelX + 10f, panelY + 10f, RESULT_PANEL_WIDTH - 20f, RESULT_PANEL_HEIGHT - 20f);
-        shapeRenderer.line(panelX + 30f, panelY + RESULT_PANEL_HEIGHT - 92f, panelX + RESULT_PANEL_WIDTH - 30f, panelY + RESULT_PANEL_HEIGHT - 92f);
-        shapeRenderer.end();
-    }
-
-    private void drawTitleMenuShapes() {
-        if (flowState != GameFlowState.TITLE) {
-            return;
-        }
-
-        float panelWidth = 520f;
-        float panelHeight = titleMenuScreen == TitleMenuScreen.CONTROLS ? 440f : 370f;
-        float panelX = (hudCamera.viewportWidth - panelWidth) / 2f;
-        float panelY = (hudCamera.viewportHeight - panelHeight) / 2f - 30f;
-
-        shapeRenderer.setProjectionMatrix(hudCamera.combined);
-        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-        shapeRenderer.setColor(0f, 0f, 0f, 0.5f);
-        shapeRenderer.rect(panelX, panelY, panelWidth, panelHeight);
-        shapeRenderer.setColor(0.1f, 0.14f, 0.18f, 0.8f);
-        shapeRenderer.rect(panelX + 10f, panelY + 10f, panelWidth - 20f, panelHeight - 20f);
-        shapeRenderer.end();
-
-        shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
-        shapeRenderer.setColor(PANEL_BORDER_COLOR);
-        shapeRenderer.rect(panelX, panelY, panelWidth, panelHeight);
-        shapeRenderer.rect(panelX + 10f, panelY + 10f, panelWidth - 20f, panelHeight - 20f);
-        shapeRenderer.line(panelX + 30f, panelY + panelHeight - 92f, panelX + panelWidth - 30f, panelY + panelHeight - 92f);
         shapeRenderer.end();
     }
 
@@ -1984,49 +1909,6 @@ public class Main3D implements ApplicationListener {
         return (index % itemCount + itemCount) % itemCount;
     }
 
-    private String getTitleMenuItemText(int index, boolean selected) {
-        String label;
-        switch (index) {
-            case 0:
-                label = "Start Game";
-                break;
-            case 1:
-                label = "Weapon Select";
-                break;
-            case 2:
-                label = "Stage Select";
-                break;
-            case 3:
-                label = "Difficulty";
-                break;
-            case 4:
-                label = "Controls";
-                break;
-            default:
-                label = "";
-                break;
-        }
-        return selected ? "> " + label + " <" : label;
-    }
-
-    private String getStageMenuItemText(int index, boolean selected) {
-        StageType3D stageType = StageType3D.values()[index];
-        String label = stageType.getDisplayName();
-        if (stageType == selectedStageType) {
-            label += " (Selected)";
-        }
-        return selected ? "> " + label + " <" : label;
-    }
-
-    private String getWeaponMenuItemText(int index, boolean selected) {
-        WeaponConfig3D weapon = getWeaponByMenuIndex(index);
-        String label = weapon.getName();
-        if (weapon == selectedTitleWeapon) {
-            label += " (Selected)";
-        }
-        return selected ? "> " + label + " <" : label;
-    }
-
     private WeaponConfig3D getWeaponByMenuIndex(int index) {
         switch (index) {
             case 1:
@@ -2046,15 +1928,6 @@ public class Main3D implements ApplicationListener {
             return 2;
         }
         return 0;
-    }
-
-    private String getDifficultyMenuItemText(int index, boolean selected) {
-        CpuDifficulty3D difficulty = CpuDifficulty3D.values()[index];
-        String label = difficulty.getLabel();
-        if (difficulty == selectedCpuDifficulty) {
-            label += " (Selected)";
-        }
-        return selected ? "> " + label + " <" : label;
     }
 
     private void resetMatchResult() {
