@@ -44,8 +44,8 @@ public class MenuUi3D {
 
     private static final float REFERENCE_WIDTH = 1280f;
     private static final float REFERENCE_HEIGHT = 720f;
-    private static final float MIN_UI_SCALE = 0.78f;
-    private static final float MAX_UI_SCALE = 1.12f;
+    private static final float MIN_UI_SCALE = 1f;
+    private static final float MAX_UI_SCALE = 1.46f;
     private static final float SCRIM_ALPHA = 0.42f;
     private static final float PANEL_SHADOW_ALPHA = 0.18f;
     private static final float PANEL_ALPHA = 0.82f;
@@ -55,12 +55,12 @@ public class MenuUi3D {
     private static final float CARD_INNER_ALPHA = 0.9f;
     private static final float CARD_SELECTED_INNER_ALPHA = 0.96f;
     private static final float TEXT_SHADOW_ALPHA = 0.8f;
-    private static final float TITLE_SCALE = 1.46f;
-    private static final float SECTION_TITLE_SCALE = 1.16f;
-    private static final float BODY_SCALE = 1f;
-    private static final float SMALL_SCALE = 0.88f;
-    private static final float TINY_SCALE = 0.8f;
-    private static final float FOOTER_LINE_GAP = 18f;
+    private static final float TITLE_SCALE = 3.02f;
+    private static final float SECTION_TITLE_SCALE = 2.18f;
+    private static final float BODY_SCALE = 1.48f;
+    private static final float SMALL_SCALE = 1.22f;
+    private static final float TINY_SCALE = 1.02f;
+    private static final float FOOTER_LINE_GAP = 24f;
     private static final int WEAPON_STAT_SEGMENTS = 5;
     private static final Color SCRIM_COLOR = new Color(0.01f, 0.02f, 0.04f, SCRIM_ALPHA);
     private static final Color PANEL_COLOR = new Color(0.04f, 0.06f, 0.1f, PANEL_ALPHA);
@@ -106,58 +106,77 @@ public class MenuUi3D {
         String selectedDifficulty
     ) {
         float uiScale = getUiScale(camera);
-        PanelRect panel = createPanel(camera, 0.5f, 0.72f, 430f, 700f, 360f, 560f, -8f * uiScale);
-        float padding = 22f * uiScale;
-        float sectionGap = 12f * uiScale;
-        float titleTop = panel.top() - 34f * uiScale;
-        float menuTop = titleTop - 106f * uiScale;
-        float menuItemHeight = 38f * uiScale;
+        PanelRect panel = createPanel(camera, 0.72f, 0.88f, 800f, 1260f, 600f, 940f, 0f);
+        float padding = 32f * uiScale;
+        float sectionGap = 22f * uiScale;
+        float footerBottom = panel.y + 18f * uiScale;
+        float footerHeight = 56f * uiScale;
+        float footerTop = footerBottom + footerHeight;
+        float summaryCardHeight = 66f * uiScale;
+        float summaryCardBottom = footerTop + 28f * uiScale;
+        float summaryCardTop = summaryCardBottom + summaryCardHeight;
+        float dividerY = summaryCardTop + sectionGap * 0.5f;
+        float titleTop = panel.top() - 44f * uiScale;
+        float promptY = titleTop - 38f * uiScale;
+        boolean showStepText = stepText != null && !stepText.isEmpty();
+        float headerHeight = showStepText ? 126f * uiScale : 94f * uiScale;
+        float menuItemHeight = 48f * uiScale;
         float menuGap = 12f * uiScale;
+        int menuCount = menuItems.length;
+        float menuAreaHeight = menuCount * menuItemHeight + (menuCount - 1) * menuGap;
         float menuWidth = panel.width - padding * 2f;
-        float summaryTop = panel.y + 126f * uiScale;
-        float footerTop = panel.y + 54f * uiScale;
+        float menuBottom = summaryCardTop + sectionGap;
+        float menuTop = menuBottom + menuAreaHeight;
+        float headerBottom = panel.top() - headerHeight;
+        if (menuTop > headerBottom) {
+            float overflow = menuTop - headerBottom;
+            menuBottom -= overflow;
+            menuTop -= overflow;
+        }
+        float summaryLineY = summaryCardBottom;
+        float chipHeight = summaryCardHeight;
 
         float chipWidth = (panel.width - padding * 2f - sectionGap * 2f) / 3f;
-        float summaryLineY = summaryTop;
 
         beginShapes(camera);
         drawScreenScrim(camera.viewportWidth, camera.viewportHeight);
         drawPanel(panel, PLAYER_ACCENT);
-        for (int i = 0; i < menuItems.length; i++) {
+        for (int i = 0; i < menuCount; i++) {
             float rowY = menuTop - i * (menuItemHeight + menuGap) - menuItemHeight;
             drawMenuRow(panel.x + padding, rowY, menuWidth, menuItemHeight, i == selectedIndex, uiScale);
         }
-        drawDivider(panel.x + padding, summaryTop + 18f * uiScale, panel.right() - padding);
-        drawInfoChipFrame(panel.x + padding, summaryLineY, chipWidth, 44f * uiScale, PLAYER_ACCENT);
-        drawInfoChipFrame(panel.x + padding + chipWidth + sectionGap, summaryLineY, chipWidth, 44f * uiScale, ENEMY_ACCENT);
-        drawInfoChipFrame(panel.right() - padding - chipWidth, summaryLineY, chipWidth, 44f * uiScale, TITLE_ACCENT);
+        drawDivider(panel.x + padding, dividerY, panel.right() - padding);
+        drawInfoChipFrame(panel.x + padding, summaryLineY, chipWidth, chipHeight, PLAYER_ACCENT);
+        drawInfoChipFrame(panel.x + padding + chipWidth + sectionGap, summaryLineY, chipWidth, chipHeight, ENEMY_ACCENT);
+        drawInfoChipFrame(panel.right() - padding - chipWidth, summaryLineY, chipWidth, chipHeight, TITLE_ACCENT);
         endShapes();
 
         beginText(camera);
         drawCenteredText(titleText, panel.centerX(), titleTop, panel.width - padding * 2f, HEADING_COLOR, TITLE_SCALE * uiScale, 0.9f * uiScale, true);
-        drawWrappedText(promptText, panel.x + padding, titleTop - 28f * uiScale, panel.width - padding * 2f, Align.center, SUBTEXT_COLOR, SMALL_SCALE * uiScale, true);
-        drawWrappedText(stepText, panel.x + padding, titleTop - 52f * uiScale, panel.width - padding * 2f, Align.center, TITLE_ACCENT, TINY_SCALE * uiScale, true);
-        for (int i = 0; i < menuItems.length; i++) {
+        drawWrappedText(promptText, panel.x + padding, promptY, panel.width - padding * 2f, Align.center, SUBTEXT_COLOR, SMALL_SCALE * uiScale, true);
+        if (showStepText) {
+            drawWrappedText(stepText, panel.x + padding, promptY - 28f * uiScale, panel.width - padding * 2f, Align.center, TITLE_ACCENT, TINY_SCALE * uiScale, true);
+        }
+        for (int i = 0; i < menuCount; i++) {
             float rowY = menuTop - i * (menuItemHeight + menuGap) - menuItemHeight;
             drawCenteredText(
                 menuItems[i],
                 panel.centerX(),
-                rowY + menuItemHeight * 0.71f,
+                rowY + menuItemHeight * 0.67f,
                 menuWidth - 68f * uiScale,
-                i == selectedIndex ? HEADING_COLOR : SUBTEXT_COLOR,
-                BODY_SCALE * uiScale,
-                0.74f * uiScale,
+                i == selectedIndex ? HEADING_COLOR : (i == 0 ? TITLE_ACCENT : SUBTEXT_COLOR),
+                (i == 0 ? BODY_SCALE * 1.08f : BODY_SCALE) * uiScale,
+                SMALL_SCALE * uiScale,
                 i == selectedIndex
             );
         }
 
-        drawInfoChipText(panel.x + padding, summaryLineY, chipWidth, 44f * uiScale, "Weapon", selectedWeapon, PLAYER_ACCENT, uiScale);
-        drawInfoChipText(panel.x + padding + chipWidth + sectionGap, summaryLineY, chipWidth, 44f * uiScale, "Stage", selectedStage, ENEMY_ACCENT, uiScale);
-        drawInfoChipText(panel.right() - padding - chipWidth, summaryLineY, chipWidth, 44f * uiScale, "Difficulty", selectedDifficulty, TITLE_ACCENT, uiScale);
+        drawInfoChipText(panel.x + padding, summaryLineY, chipWidth, chipHeight, "Weapon", selectedWeapon, PLAYER_ACCENT, uiScale);
+        drawInfoChipText(panel.x + padding + chipWidth + sectionGap, summaryLineY, chipWidth, chipHeight, "Stage", selectedStage, ENEMY_ACCENT, uiScale);
+        drawInfoChipText(panel.right() - padding - chipWidth, summaryLineY, chipWidth, chipHeight, "Difficulty", selectedDifficulty, TITLE_ACCENT, uiScale);
 
-        drawFooterText(panel, footerTop, new String[] {
-            "W/S or Arrow Keys: Move",
-            "Enter: Select",
+        drawFooterText(panel, footerBottom + footerHeight * 0.52f, new String[] {
+            "W/S or Arrow Keys: Move   Enter: Select",
             "M: Mute"
         }, uiScale);
         endText();
@@ -170,15 +189,15 @@ public class MenuUi3D {
         WeaponConfig3D currentWeapon
     ) {
         float uiScale = getUiScale(camera);
-        PanelRect panel = createPanel(camera, 0.86f, 0.76f, 720f, 1080f, 380f, 720f, -4f * uiScale);
-        float padding = 22f * uiScale;
-        float titleY = panel.top() - 34f * uiScale;
-        float cardsTop = titleY - 76f * uiScale;
+        PanelRect panel = createPanel(camera, 0.94f, 0.82f, 900f, 1260f, 470f, 820f, 0f);
+        float padding = 26f * uiScale;
+        float titleY = panel.top() - 42f * uiScale;
+        float cardsTop = titleY - 90f * uiScale;
         float footerTop = panel.y + 44f * uiScale;
         float contentWidth = panel.width - padding * 2f;
-        float gap = Math.min(18f * uiScale, contentWidth * 0.03f);
+        float gap = Math.min(22f * uiScale, contentWidth * 0.032f);
         float cardWidth = (contentWidth - gap * (weapons.length - 1)) / weapons.length;
-        float cardHeight = Math.min(panel.height * 0.5f, 270f * uiScale);
+        float cardHeight = Math.min(panel.height * 0.62f, 364f * uiScale);
         float cardY = cardsTop - cardHeight;
 
         beginShapes(camera);
@@ -213,15 +232,15 @@ public class MenuUi3D {
         StageType3D currentStage
     ) {
         float uiScale = getUiScale(camera);
-        PanelRect panel = createPanel(camera, 0.88f, 0.76f, 720f, 1080f, 380f, 720f, -4f * uiScale);
-        float padding = 22f * uiScale;
-        float titleY = panel.top() - 34f * uiScale;
-        float cardsTop = titleY - 76f * uiScale;
+        PanelRect panel = createPanel(camera, 0.94f, 0.8f, 900f, 1260f, 460f, 800f, 0f);
+        float padding = 26f * uiScale;
+        float titleY = panel.top() - 42f * uiScale;
+        float cardsTop = titleY - 90f * uiScale;
         float footerTop = panel.y + 44f * uiScale;
         float contentWidth = panel.width - padding * 2f;
-        float gap = Math.min(18f * uiScale, contentWidth * 0.03f);
+        float gap = Math.min(22f * uiScale, contentWidth * 0.032f);
         float cardWidth = (contentWidth - gap * (stageTypes.length - 1)) / stageTypes.length;
-        float cardHeight = Math.min(panel.height * 0.46f, 240f * uiScale);
+        float cardHeight = Math.min(panel.height * 0.56f, 330f * uiScale);
         float cardY = cardsTop - cardHeight;
 
         beginShapes(camera);
@@ -256,15 +275,15 @@ public class MenuUi3D {
         CpuDifficulty3D currentDifficulty
     ) {
         float uiScale = getUiScale(camera);
-        PanelRect panel = createPanel(camera, 0.84f, 0.72f, 700f, 980f, 380f, 680f, -4f * uiScale);
-        float padding = 22f * uiScale;
-        float titleY = panel.top() - 34f * uiScale;
-        float cardsTop = titleY - 72f * uiScale;
+        PanelRect panel = createPanel(camera, 0.9f, 0.76f, 760f, 1120f, 400f, 720f, 0f);
+        float padding = 26f * uiScale;
+        float titleY = panel.top() - 42f * uiScale;
+        float cardsTop = titleY - 84f * uiScale;
         float footerTop = panel.y + 44f * uiScale;
         float contentWidth = panel.width - padding * 2f;
-        float gap = Math.min(18f * uiScale, contentWidth * 0.03f);
+        float gap = Math.min(22f * uiScale, contentWidth * 0.032f);
         float cardWidth = (contentWidth - gap * (difficulties.length - 1)) / difficulties.length;
-        float cardHeight = Math.min(panel.height * 0.43f, 216f * uiScale);
+        float cardHeight = Math.min(panel.height * 0.52f, 292f * uiScale);
         float cardY = cardsTop - cardHeight;
 
         beginShapes(camera);
@@ -294,10 +313,10 @@ public class MenuUi3D {
 
     public void drawControls(OrthographicCamera camera) {
         float uiScale = getUiScale(camera);
-        PanelRect panel = createPanel(camera, 0.86f, 0.84f, 720f, 1040f, 420f, 780f, -4f * uiScale);
-        float padding = 24f * uiScale;
-        float titleY = panel.top() - 34f * uiScale;
-        float contentTop = titleY - 56f * uiScale;
+        PanelRect panel = createPanel(camera, 0.9f, 0.88f, 820f, 1160f, 500f, 860f, 0f);
+        float padding = 28f * uiScale;
+        float titleY = panel.top() - 42f * uiScale;
+        float contentTop = titleY - 64f * uiScale;
         float sectionGap = 14f * uiScale;
         float rowGap = 16f * uiScale;
         float keyColumnWidth = Math.min(190f * uiScale, (panel.width - padding * 2f) * 0.34f);
@@ -340,7 +359,7 @@ public class MenuUi3D {
 
     public void drawCountdown(OrthographicCamera camera, String countdownText, String subtitleText, String backText) {
         float uiScale = getUiScale(camera);
-        PanelRect panel = createPanel(camera, 0.42f, 0.3f, 320f, 520f, 220f, 320f, 0f);
+        PanelRect panel = createPanel(camera, 0.46f, 0.34f, 360f, 560f, 240f, 360f, 0f);
 
         beginShapes(camera);
         drawScreenScrim(camera.viewportWidth, camera.viewportHeight);
@@ -356,7 +375,7 @@ public class MenuUi3D {
 
     public void drawPause(OrthographicCamera camera, InfoRow[] rows) {
         float uiScale = getUiScale(camera);
-        PanelRect panel = createPanel(camera, 0.52f, 0.54f, 420f, 680f, 320f, 520f, -6f * uiScale);
+        PanelRect panel = createPanel(camera, 0.58f, 0.62f, 520f, 820f, 380f, 620f, 0f);
 
         beginShapes(camera);
         drawScreenScrim(camera.viewportWidth, camera.viewportHeight);
@@ -387,7 +406,7 @@ public class MenuUi3D {
         String returnText
     ) {
         float uiScale = getUiScale(camera);
-        PanelRect panel = createPanel(camera, 0.56f, 0.68f, 440f, 760f, 360f, 620f, -10f * uiScale);
+        PanelRect panel = createPanel(camera, 0.6f, 0.72f, 520f, 860f, 420f, 700f, 0f);
 
         beginShapes(camera);
         drawScreenScrim(camera.viewportWidth, camera.viewportHeight);
@@ -492,9 +511,14 @@ public class MenuUi3D {
             shapeRenderer.triangle(x + arrowInset, midY, x + arrowInset + 10f * uiScale, midY + arrowHalf, x + arrowInset + 10f * uiScale, midY - arrowHalf);
             shapeRenderer.triangle(x + width - arrowInset, midY, x + width - arrowInset - 10f * uiScale, midY + arrowHalf, x + width - arrowInset - 10f * uiScale, midY - arrowHalf);
         } else {
-            shapeRenderer.setColor(1f, 1f, 1f, 0.05f);
+            shapeRenderer.setColor(1f, 1f, 1f, 0.09f);
             shapeRenderer.rect(x, y, width, height);
         }
+        shapeRenderer.end();
+
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
+        shapeRenderer.setColor(selected ? CARD_SELECTED_BORDER_COLOR : PANEL_BORDER_COLOR);
+        shapeRenderer.rect(x, y, width, height);
         shapeRenderer.end();
     }
 
@@ -522,22 +546,24 @@ public class MenuUi3D {
     }
 
     private void drawWeaponStats(float x, float y, float width, float height, WeaponConfig3D weapon, WeaponConfig3D[] allWeapons, float uiScale) {
-        float left = x + 16f * uiScale;
-        float rowWidth = width - 32f * uiScale;
-        float barWidth = rowWidth * 0.48f;
-        float labelWidth = rowWidth - barWidth - 10f * uiScale;
-        float rowHeight = 24f * uiScale;
-        float startY = y + height - 106f * uiScale;
-        float barHeight = 8f * uiScale;
+        float padding = 18f * uiScale;
+        float rowWidth = width - padding * 2f;
+        float labelWidth = rowWidth * 0.29f;
+        float valueWidth = 56f * uiScale;
+        float barWidth = rowWidth - labelWidth - valueWidth - 14f * uiScale;
+        float barX = x + padding + labelWidth + 8f * uiScale;
+        float rowHeight = 28f * uiScale;
+        float startY = y + height - 154f * uiScale;
+        float barHeight = 10f * uiScale;
 
-        drawStatRowBackground(left, startY, rowWidth, rowHeight, uiScale);
-        drawSegmentBar(left + labelWidth + 10f * uiScale, startY + 6f * uiScale, barWidth, barHeight, getWeaponRangeRatio(weapon, allWeapons), PLAYER_ACCENT);
-        drawStatRowBackground(left, startY - 30f * uiScale, rowWidth, rowHeight, uiScale);
-        drawSegmentBar(left + labelWidth + 10f * uiScale, startY - 24f * uiScale, barWidth, barHeight, getWeaponFireRatio(weapon, allWeapons), PLAYER_ACCENT);
-        drawStatRowBackground(left, startY - 60f * uiScale, rowWidth, rowHeight, uiScale);
-        drawSegmentBar(left + labelWidth + 10f * uiScale, startY - 54f * uiScale, barWidth, barHeight, getWeaponPaintRatio(weapon, allWeapons), PLAYER_ACCENT);
-        drawStatRowBackground(left, startY - 90f * uiScale, rowWidth, rowHeight, uiScale);
-        drawSegmentBar(left + labelWidth + 10f * uiScale, startY - 84f * uiScale, barWidth, barHeight, getWeaponInkCostRatio(weapon, allWeapons), ENEMY_ACCENT);
+        drawStatRowBackground(x + padding, startY, rowWidth, rowHeight, uiScale);
+        drawSegmentBar(barX, startY + 9f * uiScale, barWidth, barHeight, getWeaponRangeRatio(weapon, allWeapons), PLAYER_ACCENT);
+        drawStatRowBackground(x + padding, startY - 38f * uiScale, rowWidth, rowHeight, uiScale);
+        drawSegmentBar(barX, startY - 29f * uiScale, barWidth, barHeight, getWeaponFireRatio(weapon, allWeapons), PLAYER_ACCENT);
+        drawStatRowBackground(x + padding, startY - 76f * uiScale, rowWidth, rowHeight, uiScale);
+        drawSegmentBar(barX, startY - 67f * uiScale, barWidth, barHeight, getWeaponPaintRatio(weapon, allWeapons), PLAYER_ACCENT);
+        drawStatRowBackground(x + padding, startY - 114f * uiScale, rowWidth, rowHeight, uiScale);
+        drawSegmentBar(barX, startY - 105f * uiScale, barWidth, barHeight, getWeaponInkCostRatio(weapon, allWeapons), ENEMY_ACCENT);
     }
 
     private void drawStageCardDecorations(float x, float y, float width, float height, StageType3D stageType, float uiScale) {
@@ -561,19 +587,20 @@ public class MenuUi3D {
     }
 
     private void drawDifficultyBars(float x, float y, float width, float height, CpuDifficulty3D difficulty, float uiScale) {
-        float left = x + 16f * uiScale;
-        float rowWidth = width - 32f * uiScale;
-        float barWidth = rowWidth * 0.48f;
-        float labelWidth = rowWidth - barWidth - 10f * uiScale;
-        float startY = y + height - 118f * uiScale;
-        float barHeight = 8f * uiScale;
+        float padding = 18f * uiScale;
+        float rowWidth = width - padding * 2f;
+        float labelWidth = rowWidth * 0.34f;
+        float barWidth = rowWidth - labelWidth - 12f * uiScale;
+        float barX = x + padding + labelWidth + 8f * uiScale;
+        float startY = y + height - 138f * uiScale;
+        float barHeight = 10f * uiScale;
 
-        drawStatRowBackground(left, startY, rowWidth, 24f * uiScale, uiScale);
-        drawSegmentBar(left + labelWidth + 10f * uiScale, startY + 6f * uiScale, barWidth, barHeight, getDifficultySpeedRatio(difficulty), TITLE_ACCENT);
-        drawStatRowBackground(left, startY - 30f * uiScale, rowWidth, 24f * uiScale, uiScale);
-        drawSegmentBar(left + labelWidth + 10f * uiScale, startY - 24f * uiScale, barWidth, barHeight, getDifficultyAccuracyRatio(difficulty), TITLE_ACCENT);
-        drawStatRowBackground(left, startY - 60f * uiScale, rowWidth, 24f * uiScale, uiScale);
-        drawSegmentBar(left + labelWidth + 10f * uiScale, startY - 54f * uiScale, barWidth, barHeight, getDifficultyReactionRatio(difficulty), TITLE_ACCENT);
+        drawStatRowBackground(x + padding, startY, rowWidth, 28f * uiScale, uiScale);
+        drawSegmentBar(barX, startY + 9f * uiScale, barWidth, barHeight, getDifficultySpeedRatio(difficulty), TITLE_ACCENT);
+        drawStatRowBackground(x + padding, startY - 38f * uiScale, rowWidth, 28f * uiScale, uiScale);
+        drawSegmentBar(barX, startY - 29f * uiScale, barWidth, barHeight, getDifficultyAccuracyRatio(difficulty), TITLE_ACCENT);
+        drawStatRowBackground(x + padding, startY - 76f * uiScale, rowWidth, 28f * uiScale, uiScale);
+        drawSegmentBar(barX, startY - 67f * uiScale, barWidth, barHeight, getDifficultyReactionRatio(difficulty), TITLE_ACCENT);
     }
 
     private void drawStatRowBackground(float x, float y, float width, float height, float uiScale) {
@@ -602,26 +629,26 @@ public class MenuUi3D {
     }
 
     private void drawWeaponCardText(float x, float y, float width, float height, WeaponConfig3D weapon, boolean selected, float uiScale) {
-        float padding = 16f * uiScale;
-        float titleY = y + height - 26f * uiScale;
-        float roleY = titleY - 22f * uiScale;
+        float padding = 18f * uiScale;
+        float titleY = y + height - 34f * uiScale;
+        float roleY = titleY - 28f * uiScale;
         float rowWidth = width - padding * 2f;
-        float rowLabelWidth = rowWidth * 0.45f;
-        float rowValueWidth = rowWidth - rowLabelWidth - 10f * uiScale;
-        float rowStartY = y + height - 96f * uiScale;
+        float rowLabelWidth = rowWidth * 0.29f;
+        float rowValueWidth = 56f * uiScale;
+        float rowStartY = y + height - 146f * uiScale;
 
-        drawCenteredText(weapon.getName(), x + width / 2f, titleY, width - padding * 2f, selected ? HEADING_COLOR : Color.WHITE, SMALL_SCALE * uiScale, 0.72f * uiScale, true);
-        drawCenteredText(weapon.getRoleLabel(), x + width / 2f, roleY, width - padding * 2f, SUBTEXT_COLOR, TINY_SCALE * uiScale, 0.68f * uiScale, false);
+        drawCenteredText(weapon.getName(), x + width / 2f, titleY, width - padding * 2f, selected ? HEADING_COLOR : Color.WHITE, SMALL_SCALE * uiScale, TINY_SCALE * uiScale, true);
+        drawCenteredText(weapon.getRoleLabel(), x + width / 2f, roleY, width - padding * 2f, SUBTEXT_COLOR, SMALL_SCALE * 0.86f * uiScale, TINY_SCALE * uiScale, false);
 
-        drawLeftText("Range", x + padding, rowStartY, rowLabelWidth, SUBTEXT_COLOR, TINY_SCALE * uiScale, 0.68f * uiScale, false);
-        drawLeftText("Fire", x + padding, rowStartY - 30f * uiScale, rowLabelWidth, SUBTEXT_COLOR, TINY_SCALE * uiScale, 0.68f * uiScale, false);
-        drawLeftText("Paint", x + padding, rowStartY - 60f * uiScale, rowLabelWidth, SUBTEXT_COLOR, TINY_SCALE * uiScale, 0.68f * uiScale, false);
-        drawLeftText("Ink Cost", x + padding, rowStartY - 90f * uiScale, rowLabelWidth, SUBTEXT_COLOR, TINY_SCALE * uiScale, 0.68f * uiScale, false);
+        drawLeftText("Range", x + padding, rowStartY, rowLabelWidth, SUBTEXT_COLOR, TINY_SCALE * uiScale, TINY_SCALE * uiScale, false);
+        drawLeftText("Fire", x + padding, rowStartY - 38f * uiScale, rowLabelWidth, SUBTEXT_COLOR, TINY_SCALE * uiScale, TINY_SCALE * uiScale, false);
+        drawLeftText("Paint", x + padding, rowStartY - 76f * uiScale, rowLabelWidth, SUBTEXT_COLOR, TINY_SCALE * uiScale, TINY_SCALE * uiScale, false);
+        drawLeftText("Ink Cost", x + padding, rowStartY - 114f * uiScale, rowLabelWidth, SUBTEXT_COLOR, TINY_SCALE * uiScale, TINY_SCALE * uiScale, false);
 
-        drawRightText(String.format("%.1f", weapon.getRange()), x + width - padding, rowStartY, rowValueWidth, MUTED_TEXT_COLOR, TINY_SCALE * uiScale, 0.68f * uiScale);
-        drawRightText(String.format("%.2f", weapon.getFireInterval()), x + width - padding, rowStartY - 30f * uiScale, rowValueWidth, MUTED_TEXT_COLOR, TINY_SCALE * uiScale, 0.68f * uiScale);
-        drawRightText(String.format("%.2f", weapon.getPaintRadius()), x + width - padding, rowStartY - 60f * uiScale, rowValueWidth, MUTED_TEXT_COLOR, TINY_SCALE * uiScale, 0.68f * uiScale);
-        drawRightText(String.format("%.1f", weapon.getInkCost()), x + width - padding, rowStartY - 90f * uiScale, rowValueWidth, MUTED_TEXT_COLOR, TINY_SCALE * uiScale, 0.68f * uiScale);
+        drawRightText(String.format("%.1f", weapon.getRange()), x + width - padding, rowStartY, rowValueWidth, MUTED_TEXT_COLOR, TINY_SCALE * uiScale, TINY_SCALE * uiScale);
+        drawRightText(String.format("%.1f/s", 1f / weapon.getFireInterval()), x + width - padding, rowStartY - 38f * uiScale, rowValueWidth, MUTED_TEXT_COLOR, TINY_SCALE * uiScale, TINY_SCALE * uiScale);
+        drawRightText(String.format("%.2f", weapon.getPaintRadius()), x + width - padding, rowStartY - 76f * uiScale, rowValueWidth, MUTED_TEXT_COLOR, TINY_SCALE * uiScale, TINY_SCALE * uiScale);
+        drawRightText(String.format("%.0f", weapon.getInkCost()), x + width - padding, rowStartY - 114f * uiScale, rowValueWidth, MUTED_TEXT_COLOR, TINY_SCALE * uiScale, TINY_SCALE * uiScale);
     }
 
     private void drawStageCardText(float x, float y, float width, float height, StageType3D stageType, boolean selected, float uiScale) {
@@ -631,21 +658,21 @@ public class MenuUi3D {
         String sizeText = String.format("%d x %d Floor", stageConfig.getColumns(), stageConfig.getRows());
         String playerText = stageType == StageType3D.TEAM_ARENA ? "Recommended: 2 vs 2" : "Recommended: 1 vs 1";
 
-        drawCenteredText(stageType.getDisplayName(), x + width / 2f, y + height - 28f * uiScale, width - padding * 2f, selected ? HEADING_COLOR : Color.WHITE, SMALL_SCALE * uiScale, 0.72f * uiScale, true);
-        drawWrappedText(summary, x + padding, y + height - 56f * uiScale, width - padding * 2f, Align.center, SUBTEXT_COLOR, TINY_SCALE * uiScale, false);
-        drawWrappedText(sizeText, x + padding, y + 78f * uiScale, width - padding * 2f, Align.center, MUTED_TEXT_COLOR, TINY_SCALE * uiScale, false);
-        drawWrappedText(playerText, x + padding, y + 56f * uiScale, width - padding * 2f, Align.center, MUTED_TEXT_COLOR, TINY_SCALE * uiScale, false);
+        drawCenteredText(stageType.getDisplayName(), x + width / 2f, y + height - 36f * uiScale, width - padding * 2f, selected ? HEADING_COLOR : Color.WHITE, SMALL_SCALE * uiScale, TINY_SCALE * uiScale, true);
+        drawWrappedText(summary, x + padding, y + height - 74f * uiScale, width - padding * 2f, Align.center, SUBTEXT_COLOR, SMALL_SCALE * 0.86f * uiScale, false);
+        drawWrappedText(sizeText, x + padding, y + 112f * uiScale, width - padding * 2f, Align.center, MUTED_TEXT_COLOR, TINY_SCALE * uiScale, false);
+        drawWrappedText(playerText, x + padding, y + 82f * uiScale, width - padding * 2f, Align.center, MUTED_TEXT_COLOR, TINY_SCALE * uiScale, false);
     }
 
     private void drawDifficultyCardText(float x, float y, float width, float height, CpuDifficulty3D difficulty, boolean selected, float uiScale) {
         float padding = 16f * uiScale;
-        float rowStartY = y + height - 104f * uiScale;
+        float rowStartY = y + height - 138f * uiScale;
 
-        drawCenteredText(difficulty.getLabel(), x + width / 2f, y + height - 28f * uiScale, width - padding * 2f, selected ? HEADING_COLOR : Color.WHITE, SMALL_SCALE * uiScale, 0.72f * uiScale, true);
-        drawWrappedText(getDifficultySummary(difficulty), x + padding, y + height - 56f * uiScale, width - padding * 2f, Align.center, SUBTEXT_COLOR, TINY_SCALE * uiScale, false);
-        drawLeftText("Speed", x + padding, rowStartY, width * 0.42f, SUBTEXT_COLOR, TINY_SCALE * uiScale, 0.68f * uiScale, false);
-        drawLeftText("Accuracy", x + padding, rowStartY - 30f * uiScale, width * 0.42f, SUBTEXT_COLOR, TINY_SCALE * uiScale, 0.68f * uiScale, false);
-        drawLeftText("Reaction", x + padding, rowStartY - 60f * uiScale, width * 0.42f, SUBTEXT_COLOR, TINY_SCALE * uiScale, 0.68f * uiScale, false);
+        drawCenteredText(difficulty.getLabel(), x + width / 2f, y + height - 36f * uiScale, width - padding * 2f, selected ? HEADING_COLOR : Color.WHITE, SMALL_SCALE * uiScale, TINY_SCALE * uiScale, true);
+        drawWrappedText(getDifficultySummary(difficulty), x + padding, y + height - 74f * uiScale, width - padding * 2f, Align.center, SUBTEXT_COLOR, SMALL_SCALE * 0.86f * uiScale, false);
+        drawLeftText("Speed", x + padding, rowStartY, width * 0.34f, SUBTEXT_COLOR, TINY_SCALE * uiScale, TINY_SCALE * uiScale, false);
+        drawLeftText("Accuracy", x + padding, rowStartY - 38f * uiScale, width * 0.34f, SUBTEXT_COLOR, TINY_SCALE * uiScale, TINY_SCALE * uiScale, false);
+        drawLeftText("Reaction", x + padding, rowStartY - 76f * uiScale, width * 0.34f, SUBTEXT_COLOR, TINY_SCALE * uiScale, TINY_SCALE * uiScale, false);
     }
 
     private float drawInfoRows(InfoRow[] rows, float x, float topY, float width, float rowGap, float uiScale) {
@@ -675,8 +702,8 @@ public class MenuUi3D {
     }
 
     private void drawInfoChipText(float x, float y, float width, float height, String label, String value, Color accentColor, float uiScale) {
-        drawLeftText(label, x + 10f * uiScale, y + height - 12f * uiScale, width - 20f * uiScale, accentColor, TINY_SCALE * uiScale, 0.68f * uiScale, false);
-        drawLeftText(value, x + 10f * uiScale, y + 16f * uiScale, width - 20f * uiScale, Color.WHITE, SMALL_SCALE * uiScale, 0.7f * uiScale, false);
+        drawCenteredText(label, x + width / 2f, y + height - 16f * uiScale, width - 20f * uiScale, accentColor, TINY_SCALE * uiScale, TINY_SCALE * uiScale, false);
+        drawCenteredText(value, x + width / 2f, y + 24f * uiScale, width - 20f * uiScale, Color.WHITE, SMALL_SCALE * uiScale, TINY_SCALE * uiScale, false);
     }
 
     private void drawDivider(float startX, float y, float endX) {

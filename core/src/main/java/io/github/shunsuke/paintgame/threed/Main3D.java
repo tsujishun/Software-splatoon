@@ -74,10 +74,29 @@ public class Main3D implements ApplicationListener {
     private static final float CROSSHAIR_CENTER_RADIUS = 2f;
     private static final float CROSSHAIR_SHADOW_OFFSET = 1f;
     private static final float CROSSHAIR_DOT_RADIUS = 1.5f;
+    private static final float HUD_REFERENCE_WIDTH = 1280f;
+    private static final float HUD_REFERENCE_HEIGHT = 720f;
+    private static final float HUD_MIN_SCALE = 1f;
+    private static final float HUD_MAX_SCALE = 1.45f;
+    private static final float TOP_PANEL_MARGIN = 18f;
+    private static final float TOP_PANEL_GAP = 16f;
+    private static final float TEAM_PANEL_WIDTH = 250f;
+    private static final float TEAM_PANEL_HEIGHT = 94f;
+    private static final float TEAM_PANEL_INNER_PADDING = 16f;
+    private static final float TEAM_PANEL_LINE_GAP = 22f;
+    private static final float TEAM_PAINT_BAR_HEIGHT = 8f;
+    private static final float TIME_PANEL_WIDTH = 176f;
+    private static final float TIME_PANEL_HEIGHT = 90f;
+    private static final float INFO_PANEL_MARGIN = 20f;
+    private static final float INFO_PANEL_WIDTH = 246f;
+    private static final float INFO_PANEL_PADDING = 16f;
+    private static final float INFO_PANEL_LINE_GAP = 25f;
     private static final float WEAPON_PANEL_MARGIN = 18f;
-    private static final float WEAPON_PANEL_WIDTH = 126f;
-    private static final float WEAPON_PANEL_HEIGHT = 46f;
-    private static final float WEAPON_PANEL_GAP = 10f;
+    private static final float WEAPON_PANEL_WIDTH = 164f;
+    private static final float WEAPON_PANEL_HEIGHT = 64f;
+    private static final float WEAPON_PANEL_GAP = 14f;
+    private static final float WEAPON_TEXT_LINE_GAP = 18f;
+    private static final float WEAPON_PANEL_ACCENT_HEIGHT = 5f;
     private static final float TEAM_MARKER_RADIUS = 9f;
     private static final float TEAM_MARKER_Y_OFFSET = 0.95f;
     private static final float TEAM_MARKER_FORWARD_OFFSET = 0.7f;
@@ -87,16 +106,19 @@ public class Main3D implements ApplicationListener {
     private static final float MINIMAP_MAX_SIZE = 180f;
     private static final float MINIMAP_PANEL_PADDING = 8f;
     private static final float MINIMAP_MARKER_RADIUS = 4f;
-    private static final float STATUS_BAR_WIDTH = 190f;
-    private static final float STATUS_BAR_HEIGHT = 14f;
-    private static final float STATUS_BAR_MARGIN = 16f;
-    private static final float STATUS_PANEL_HEIGHT = 28f;
-    private static final float TEAM_STATUS_PANEL_WIDTH = 214f;
-    private static final float TEAM_STATUS_PANEL_HEIGHT = 60f;
-    private static final float CENTER_TIME_PANEL_WIDTH = 148f;
-    private static final float CENTER_TIME_PANEL_HEIGHT = 42f;
-    private static final float BOTTOM_INFO_PANEL_WIDTH = 240f;
-    private static final float BOTTOM_INFO_PANEL_HEIGHT = 114f;
+    private static final float PLAYER_HP_GAUGE_WIDTH = 122f;
+    private static final float PLAYER_HP_GAUGE_HEIGHT = 15f;
+    private static final float PLAYER_HP_GAUGE_OFFSET_Y = 14f;
+    private static final float PLAYER_INK_GAUGE_WIDTH = 18f;
+    private static final float PLAYER_INK_GAUGE_HEIGHT = 108f;
+    private static final float PLAYER_INK_GAUGE_OFFSET_X = 58f;
+    private static final float PLAYER_STATUS_CLAMP_MARGIN = 16f;
+    private static final float PLAYER_STATUS_LABEL_GAP = 7f;
+    private static final float PLAYER_STATUS_TEXT_SCALE = 1.08f;
+    private static final float HUD_SCALE_TITLE = 1.88f;
+    private static final float HUD_SCALE_BODY = 1.28f;
+    private static final float HUD_SCALE_SMALL = 1.1f;
+    private static final float HUD_SCALE_TINY = 0.98f;
     private static final int MAX_INK_PARTICLES = 96;
     private static final int IMPACT_PARTICLE_COUNT = 7;
     private static final float IMPACT_PARTICLE_MIN_LIFETIME = 0.22f;
@@ -122,6 +144,7 @@ public class Main3D implements ApplicationListener {
     private static final Color CLEAR_COLOR = new Color(0.11f, 0.14f, 0.19f, 1f);
     private static final Color PANEL_COLOR = new Color(0.03f, 0.05f, 0.08f, 0.56f);
     private static final Color PANEL_BORDER_COLOR = new Color(0.92f, 0.98f, 1f, 0.2f);
+    private static final Color HUD_TIME_ACCENT_COLOR = new Color(1f, 0.9f, 0.36f, 0.98f);
     private static final Color WEAPON_SLOT_COLOR = new Color(0f, 0f, 0f, 0.5f);
     private static final Color WEAPON_SLOT_ACTIVE_COLOR = new Color(0.12f, 0.18f, 0.26f, 0.88f);
     private static final Color WEAPON_SLOT_ACTIVE_BORDER_COLOR = new Color(0.55f, 0.9f, 1f, 0.92f);
@@ -174,6 +197,8 @@ public class Main3D implements ApplicationListener {
     private final Vector3 projectedPlayerMarker = new Vector3();
     private final Vector3 projectedCpuMarker = new Vector3();
     private final Vector3 projectedMarkerForward = new Vector3();
+    private final Vector3 projectedPlayerHeadGauge = new Vector3();
+    private final Vector3 projectedPlayerBodyGauge = new Vector3();
     private final Vector3 minimapFacingDirection = new Vector3();
     private final Vector3 cpuShotDirection = new Vector3();
     private final Vector3 projectedEffectStart = new Vector3();
@@ -336,14 +361,18 @@ public class Main3D implements ApplicationListener {
         modelBatch.end();
 
         Gdx.gl.glDisable(GL20.GL_DEPTH_TEST);
+        if (hudViewport != null) {
+            hudViewport.apply();
+        }
         hudCamera.update();
         drawWorldEffects();
         drawCombatShapes();
+        drawPlayerStatusGauges();
         drawTeamMarkers();
         drawMinimap();
-        drawStateMenus();
         drawOverlay();
         drawCrosshair();
+        drawStateMenus();
     }
 
     @Override
@@ -608,56 +637,151 @@ public class Main3D implements ApplicationListener {
             return;
         }
 
+        float hudScale = getHudScale();
+        float teamPanelX = TOP_PANEL_MARGIN * hudScale;
+        float teamPanelY = hudCamera.viewportHeight - TEAM_PANEL_HEIGHT * hudScale - TOP_PANEL_MARGIN * hudScale;
+        float enemyPanelX = hudCamera.viewportWidth - TEAM_PANEL_WIDTH * hudScale - TOP_PANEL_MARGIN * hudScale;
+        float enemyPanelY = teamPanelY;
+        float timePanelX = (hudCamera.viewportWidth - TIME_PANEL_WIDTH * hudScale) / 2f;
+        float timePanelY = hudCamera.viewportHeight - TIME_PANEL_HEIGHT * hudScale - TOP_PANEL_MARGIN * hudScale;
+        float infoPanelX = INFO_PANEL_MARGIN * hudScale;
+        float weaponPanelY = WEAPON_PANEL_MARGIN * hudScale;
+        float infoPanelY = weaponPanelY + WEAPON_PANEL_HEIGHT * hudScale + 18f * hudScale;
+        float infoTopY = infoPanelY + getBottomInfoPanelHeight(hudScale) - INFO_PANEL_PADDING * hudScale - 2f * hudScale;
+        float slotStartX = getWeaponSlotStartX(hudScale);
+
         spriteBatch.setProjectionMatrix(hudCamera.combined);
         spriteBatch.begin();
 
-        float playerPanelX = STATUS_BAR_MARGIN + 14f;
-        float playerPanelTop = hudCamera.viewportHeight - 28f;
-        float enemyPanelX = hudCamera.viewportWidth - TEAM_STATUS_PANEL_WIDTH - STATUS_BAR_MARGIN + 14f;
-        float enemyPanelTop = playerPanelTop;
-        float infoPanelX = STATUS_BAR_MARGIN + 16f;
-        float infoPanelY = WEAPON_PANEL_MARGIN + WEAPON_PANEL_HEIGHT + 14f;
-
-        drawHudText("Player Team", playerPanelX, playerPanelTop, PLAYER_TEAM_MARKER_COLOR);
-        drawHudText(String.format("%d Tiles", floorGrid.getPlayerPaintedCellCount()), playerPanelX, playerPanelTop - 22f, Color.WHITE);
-        drawHudText(String.format("%.1f%% Paint", floorGrid.getPlayerPaintRatePercent()), playerPanelX, playerPanelTop - 42f, PLAYER_TEAM_MARKER_COLOR);
-
-        drawHudText("Enemy Team", enemyPanelX, enemyPanelTop, ENEMY_TEAM_MARKER_COLOR);
-        drawHudText(String.format("%d Tiles", floorGrid.getEnemyPaintedCellCount()), enemyPanelX, enemyPanelTop - 22f, Color.WHITE);
-        drawHudText(String.format("%.1f%% Paint", floorGrid.getEnemyPaintRatePercent()), enemyPanelX, enemyPanelTop - 42f, ENEMY_TEAM_MARKER_COLOR);
-
-        drawCenteredScaledTextWithShadow(String.format("%d", (int) Math.ceil(remainingTime)), hudCamera.viewportHeight - 18f, Color.WHITE, 1.1f);
-        drawCenteredText("Time", hudCamera.viewportHeight - 44f);
-
-        drawTopLeftText(String.format("HP %d / %d", player.getHp(), Player3D.MAX_HP), infoPanelX, infoPanelY + 88f);
-        drawTopLeftText(String.format("Ink %.0f / %.0f", player.getInkAmount(), Player3D.MAX_INK_AMOUNT), infoPanelX, infoPanelY + 66f);
-        drawTopLeftText(
-            "Mode: " + getPlayerModeLabel() + "   Ground: " + getGroundStateLabel(player.getPosition()),
-            infoPanelX,
-            infoPanelY + 44f
+        drawHudLeftTextFit(
+            "PLAYER TEAM",
+            teamPanelX + TEAM_PANEL_INNER_PADDING * hudScale,
+            teamPanelY + TEAM_PANEL_HEIGHT * hudScale - 16f * hudScale,
+            TEAM_PANEL_WIDTH * hudScale - TEAM_PANEL_INNER_PADDING * 2f * hudScale,
+            PLAYER_TEAM_MARKER_COLOR,
+            HUD_SCALE_SMALL * hudScale,
+            HUD_SCALE_TINY * hudScale,
+            true
         );
-        drawTopLeftText(String.format("Team Splats P / E: %d / %d", playerSplatCount, enemySplatCount), infoPanelX, infoPanelY + 24f);
-        drawTopLeftText(
-            String.format("Ally HP %d   Enemy HP %d / %d", allyCpu.getHp(), enemyCpuOne.getHp(), enemyCpuTwo.getHp()),
-            infoPanelX,
-            infoPanelY + 6f
+        drawHudLeftTextFit(
+            floorGrid.getPlayerPaintedCellCount() + " Tiles",
+            teamPanelX + TEAM_PANEL_INNER_PADDING * hudScale,
+            teamPanelY + TEAM_PANEL_HEIGHT * hudScale - 40f * hudScale,
+            TEAM_PANEL_WIDTH * hudScale - TEAM_PANEL_INNER_PADDING * 2f * hudScale,
+            Color.WHITE,
+            HUD_SCALE_BODY * hudScale,
+            HUD_SCALE_SMALL * hudScale,
+            false
+        );
+        drawHudLeftTextFit(
+            String.format("%.1f%% Paint", floorGrid.getPlayerPaintRatePercent()),
+            teamPanelX + TEAM_PANEL_INNER_PADDING * hudScale,
+            teamPanelY + TEAM_PANEL_HEIGHT * hudScale - 64f * hudScale,
+            TEAM_PANEL_WIDTH * hudScale - TEAM_PANEL_INNER_PADDING * 2f * hudScale,
+            PLAYER_TEAM_MARKER_COLOR,
+            HUD_SCALE_SMALL * hudScale,
+            HUD_SCALE_TINY * hudScale,
+            false
+        );
+
+        drawHudLeftTextFit(
+            "ENEMY TEAM",
+            enemyPanelX + TEAM_PANEL_INNER_PADDING * hudScale,
+            enemyPanelY + TEAM_PANEL_HEIGHT * hudScale - 16f * hudScale,
+            TEAM_PANEL_WIDTH * hudScale - TEAM_PANEL_INNER_PADDING * 2f * hudScale,
+            ENEMY_TEAM_MARKER_COLOR,
+            HUD_SCALE_SMALL * hudScale,
+            HUD_SCALE_TINY * hudScale,
+            true
+        );
+        drawHudLeftTextFit(
+            floorGrid.getEnemyPaintedCellCount() + " Tiles",
+            enemyPanelX + TEAM_PANEL_INNER_PADDING * hudScale,
+            enemyPanelY + TEAM_PANEL_HEIGHT * hudScale - 40f * hudScale,
+            TEAM_PANEL_WIDTH * hudScale - TEAM_PANEL_INNER_PADDING * 2f * hudScale,
+            Color.WHITE,
+            HUD_SCALE_BODY * hudScale,
+            HUD_SCALE_SMALL * hudScale,
+            false
+        );
+        drawHudLeftTextFit(
+            String.format("%.1f%% Paint", floorGrid.getEnemyPaintRatePercent()),
+            enemyPanelX + TEAM_PANEL_INNER_PADDING * hudScale,
+            enemyPanelY + TEAM_PANEL_HEIGHT * hudScale - 64f * hudScale,
+            TEAM_PANEL_WIDTH * hudScale - TEAM_PANEL_INNER_PADDING * 2f * hudScale,
+            ENEMY_TEAM_MARKER_COLOR,
+            HUD_SCALE_SMALL * hudScale,
+            HUD_SCALE_TINY * hudScale,
+            false
+        );
+
+        drawHudCenteredTextFit(
+            "TIME",
+            timePanelX + TIME_PANEL_WIDTH * hudScale / 2f,
+            timePanelY + TIME_PANEL_HEIGHT * hudScale - 18f * hudScale,
+            TIME_PANEL_WIDTH * hudScale - 28f * hudScale,
+            HUD_TIME_ACCENT_COLOR,
+            HUD_SCALE_SMALL * hudScale,
+            HUD_SCALE_TINY * hudScale,
+            true
+        );
+        drawHudCenteredTextFit(
+            String.format("%d", (int) Math.ceil(remainingTime)),
+            timePanelX + TIME_PANEL_WIDTH * hudScale / 2f,
+            timePanelY + 38f * hudScale,
+            TIME_PANEL_WIDTH * hudScale - 28f * hudScale,
+            Color.WHITE,
+            HUD_SCALE_TITLE * hudScale,
+            HUD_SCALE_BODY * hudScale,
+            true
+        );
+
+        float infoTextWidth = INFO_PANEL_WIDTH * hudScale - INFO_PANEL_PADDING * 2f * hudScale;
+        drawHudLeftTextFit("Mode: " + getPlayerModeLabel(), infoPanelX + INFO_PANEL_PADDING * hudScale, infoTopY, infoTextWidth, Color.WHITE, HUD_SCALE_BODY * hudScale, HUD_SCALE_SMALL * hudScale, false);
+        drawHudLeftTextFit("Ground: " + getGroundStateLabel(player.getPosition()), infoPanelX + INFO_PANEL_PADDING * hudScale, infoTopY - INFO_PANEL_LINE_GAP * hudScale, infoTextWidth, Color.WHITE, HUD_SCALE_BODY * hudScale, HUD_SCALE_SMALL * hudScale, false);
+        drawHudLeftTextFit(String.format("Splats: %d - %d", playerSplatCount, enemySplatCount), infoPanelX + INFO_PANEL_PADDING * hudScale, infoTopY - INFO_PANEL_LINE_GAP * 2f * hudScale, infoTextWidth, Color.WHITE, HUD_SCALE_BODY * hudScale, HUD_SCALE_SMALL * hudScale, false);
+        drawHudLeftTextFit("Ally HP: " + allyCpu.getHp(), infoPanelX + INFO_PANEL_PADDING * hudScale, infoTopY - INFO_PANEL_LINE_GAP * 3f * hudScale, infoTextWidth, Color.WHITE, HUD_SCALE_BODY * hudScale, HUD_SCALE_SMALL * hudScale, false);
+        drawHudLeftTextFit(
+            String.format("Enemy HP: %d / %d", enemyCpuOne.getHp(), enemyCpuTwo.getHp()),
+            infoPanelX + INFO_PANEL_PADDING * hudScale,
+            infoTopY - INFO_PANEL_LINE_GAP * 4f * hudScale,
+            infoTextWidth,
+            ENEMY_TEAM_MARKER_COLOR,
+            HUD_SCALE_BODY * hudScale,
+            HUD_SCALE_SMALL * hudScale,
+            false
         );
         if (DEBUG_MODE) {
-            drawTopLeftText(DEBUG_PAINT_TEXT, STATUS_BAR_MARGIN, hudCamera.viewportHeight - 92f);
-            drawTopLeftText("Current Color: " + getCurrentPaintColorLabel(), STATUS_BAR_MARGIN, hudCamera.viewportHeight - 114f);
+            drawHudLeftTextFit(DEBUG_PAINT_TEXT, infoPanelX + INFO_PANEL_PADDING * hudScale, infoTopY - INFO_PANEL_LINE_GAP * 5f * hudScale, infoTextWidth, HUD_TIME_ACCENT_COLOR, HUD_SCALE_SMALL * hudScale, HUD_SCALE_TINY * hudScale, false);
+            drawHudLeftTextFit("Current Color: " + getCurrentPaintColorLabel(), infoPanelX + INFO_PANEL_PADDING * hudScale, infoTopY - INFO_PANEL_LINE_GAP * 6f * hudScale, infoTextWidth, HUD_TIME_ACCENT_COLOR, HUD_SCALE_SMALL * hudScale, HUD_SCALE_TINY * hudScale, false);
         }
 
-        drawWeaponHudText();
+        drawPlayerStatusText(hudScale);
+        drawWeaponHudText(slotStartX, weaponPanelY, hudScale);
 
         if (feedbackMessageTimer > 0f && feedbackMessageText != null && !feedbackMessageText.isEmpty()) {
-            drawCenteredTextWithShadow(feedbackMessageText, hudCamera.viewportHeight / 2f + 76f, feedbackMessageColor);
+            drawHudCenteredTextFit(
+                feedbackMessageText,
+                hudCamera.viewportWidth / 2f,
+                hudCamera.viewportHeight / 2f + 84f * hudScale,
+                320f * hudScale,
+                feedbackMessageColor,
+                HUD_SCALE_BODY * hudScale,
+                HUD_SCALE_SMALL * hudScale,
+                true
+            );
         }
         if (player.isSplatted()) {
-            drawCenteredTextWithShadow("Splatted!", hudCamera.viewportHeight / 2f + 26f, FEEDBACK_SPLAT_COLOR);
-            drawCenteredTextWithShadow(
+            drawHudCenteredTextFit("Splatted!", hudCamera.viewportWidth / 2f, hudCamera.viewportHeight / 2f + 36f * hudScale, 320f * hudScale, FEEDBACK_SPLAT_COLOR, HUD_SCALE_TITLE * hudScale, HUD_SCALE_BODY * hudScale, true);
+            drawHudCenteredTextFit(
                 String.format("Respawning... %.1f", player.getRespawnTimer()),
-                hudCamera.viewportHeight / 2f - 10f,
-                Color.WHITE
+                hudCamera.viewportWidth / 2f,
+                hudCamera.viewportHeight / 2f + 2f * hudScale,
+                320f * hudScale,
+                Color.WHITE,
+                HUD_SCALE_BODY * hudScale,
+                HUD_SCALE_SMALL * hudScale,
+                true
             );
         }
 
@@ -671,7 +795,7 @@ public class Main3D implements ApplicationListener {
                     hudCamera,
                     TITLE_TEXT,
                     TITLE_PROMPT_TEXT,
-                    STEP_TEXT,
+                    DEBUG_MODE ? STEP_TEXT : "",
                     TITLE_MENU_ITEMS,
                     titleMenuIndex,
                     selectedTitleWeapon.getName(),
@@ -737,46 +861,81 @@ public class Main3D implements ApplicationListener {
         }
     }
 
-    private void drawCenteredText(String text, float y) {
-        glyphLayout.setText(font, text);
-        float x = (hudCamera.viewportWidth - glyphLayout.width) / 2f;
-        font.draw(spriteBatch, glyphLayout, x, y);
+    private float getHudScale() {
+        float widthScale = Gdx.graphics.getWidth() / HUD_REFERENCE_WIDTH;
+        float heightScale = Gdx.graphics.getHeight() / HUD_REFERENCE_HEIGHT;
+        return MathUtils.clamp(Math.min(widthScale, heightScale), HUD_MIN_SCALE, HUD_MAX_SCALE);
     }
 
-    private void drawTopLeftText(String text, float x, float y) {
-        font.draw(spriteBatch, text, x, y);
+    private float getBottomInfoPanelHeight(float hudScale) {
+        int lineCount = DEBUG_MODE ? 7 : 5;
+        return INFO_PANEL_PADDING * hudScale * 2f + (lineCount - 1) * INFO_PANEL_LINE_GAP * hudScale + 18f * hudScale;
     }
 
-    private void drawHudText(String text, float x, float y, Color color) {
-        float oldR = font.getColor().r;
-        float oldG = font.getColor().g;
-        float oldB = font.getColor().b;
-        float oldA = font.getColor().a;
-        font.setColor(color);
-        font.draw(spriteBatch, text, x, y);
-        font.setColor(oldR, oldG, oldB, oldA);
+    private float getWeaponSlotStartX(float hudScale) {
+        int slotCount = getWeaponSlots().length;
+        float totalWidth = slotCount * WEAPON_PANEL_WIDTH * hudScale + (slotCount - 1) * WEAPON_PANEL_GAP * hudScale;
+        return (hudCamera.viewportWidth - totalWidth) / 2f;
     }
 
-    private void drawCenteredTextWithShadow(String text, float y, Color color) {
-        glyphLayout.setText(font, text);
-        float x = (hudCamera.viewportWidth - glyphLayout.width) / 2f;
-        float oldR = font.getColor().r;
-        float oldG = font.getColor().g;
-        float oldB = font.getColor().b;
-        float oldA = font.getColor().a;
-
-        font.setColor(0f, 0f, 0f, 0.75f);
-        font.draw(spriteBatch, glyphLayout, x + 2f, y - 2f);
-        font.setColor(color);
-        font.draw(spriteBatch, glyphLayout, x, y);
-        font.setColor(oldR, oldG, oldB, oldA);
+    private void drawHudCenteredTextFit(
+        String text,
+        float centerX,
+        float y,
+        float maxWidth,
+        Color color,
+        float preferredScale,
+        float minScale,
+        boolean shadow
+    ) {
+        float scale = fitHudSingleLineScale(text, maxWidth, preferredScale, minScale);
+        drawHudTextInternal(text, centerX, y, maxWidth, color, scale, true, shadow);
     }
 
-    private void drawCenteredScaledTextWithShadow(String text, float y, Color color, float scale) {
+    private void drawHudLeftTextFit(
+        String text,
+        float x,
+        float y,
+        float maxWidth,
+        Color color,
+        float preferredScale,
+        float minScale,
+        boolean shadow
+    ) {
+        float scale = fitHudSingleLineScale(text, maxWidth, preferredScale, minScale);
+        drawHudTextInternal(text, x, y, maxWidth, color, scale, false, shadow);
+    }
+
+    private float fitHudSingleLineScale(String text, float maxWidth, float preferredScale, float minScale) {
         float previousScaleX = font.getData().scaleX;
         float previousScaleY = font.getData().scaleY;
+        font.getData().setScale(preferredScale);
+        glyphLayout.setText(font, text);
+        float measuredWidth = glyphLayout.width;
+        font.getData().setScale(previousScaleX, previousScaleY);
+        if (measuredWidth <= maxWidth || measuredWidth <= 0f) {
+            return preferredScale;
+        }
+        return Math.max(minScale, preferredScale * (maxWidth / measuredWidth));
+    }
+
+    private void drawHudTextInternal(String text, float anchorX, float y, float maxWidth, Color color, float scale, boolean centerAligned, boolean shadow) {
+        float previousScaleX = font.getData().scaleX;
+        float previousScaleY = font.getData().scaleY;
+        Color previousColor = new Color(font.getColor());
         font.getData().setScale(scale);
-        drawCenteredTextWithShadow(text, y, color);
+        glyphLayout.setText(font, text);
+        float drawX = centerAligned ? anchorX - glyphLayout.width / 2f : anchorX;
+        if (!centerAligned && glyphLayout.width > maxWidth) {
+            drawX = anchorX;
+        }
+        if (shadow) {
+            font.setColor(0f, 0f, 0f, 0.78f);
+            font.draw(spriteBatch, text, drawX + Math.max(1f, scale * 1.2f), y - Math.max(1f, scale * 1.2f));
+        }
+        font.setColor(color);
+        font.draw(spriteBatch, text, drawX, y);
+        font.setColor(previousColor);
         font.getData().setScale(previousScaleX, previousScaleY);
     }
 
@@ -785,19 +944,20 @@ public class Main3D implements ApplicationListener {
             return;
         }
 
-        float playerTeamPanelX = STATUS_BAR_MARGIN;
-        float playerTeamPanelY = hudCamera.viewportHeight - TEAM_STATUS_PANEL_HEIGHT - 14f;
-        float enemyTeamPanelX = hudCamera.viewportWidth - TEAM_STATUS_PANEL_WIDTH - STATUS_BAR_MARGIN;
+        float hudScale = getHudScale();
+        float playerTeamPanelX = TOP_PANEL_MARGIN * hudScale;
+        float playerTeamPanelY = hudCamera.viewportHeight - TEAM_PANEL_HEIGHT * hudScale - TOP_PANEL_MARGIN * hudScale;
+        float enemyTeamPanelX = hudCamera.viewportWidth - TEAM_PANEL_WIDTH * hudScale - TOP_PANEL_MARGIN * hudScale;
         float enemyTeamPanelY = playerTeamPanelY;
-        float timePanelX = (hudCamera.viewportWidth - CENTER_TIME_PANEL_WIDTH) / 2f;
-        float timePanelY = hudCamera.viewportHeight - CENTER_TIME_PANEL_HEIGHT - 14f;
-        float infoPanelX = STATUS_BAR_MARGIN;
-        float infoPanelY = WEAPON_PANEL_MARGIN + WEAPON_PANEL_HEIGHT + 14f;
-        float playerHpX = infoPanelX + 16f;
-        float playerHpY = infoPanelY + 28f;
-        float inkX = infoPanelX + 16f;
-        float inkY = infoPanelY + 8f;
-        float weaponPanelY = 18f;
+        float timePanelX = (hudCamera.viewportWidth - TIME_PANEL_WIDTH * hudScale) / 2f;
+        float timePanelY = hudCamera.viewportHeight - TIME_PANEL_HEIGHT * hudScale - TOP_PANEL_MARGIN * hudScale;
+        float infoPanelX = INFO_PANEL_MARGIN * hudScale;
+        float weaponPanelY = WEAPON_PANEL_MARGIN * hudScale;
+        float infoPanelY = weaponPanelY + WEAPON_PANEL_HEIGHT * hudScale + 18f * hudScale;
+        float infoPanelHeight = getBottomInfoPanelHeight(hudScale);
+        float slotStartX = getWeaponSlotStartX(hudScale);
+        float teamGaugeWidth = TEAM_PANEL_WIDTH * hudScale - TEAM_PANEL_INNER_PADDING * 2f * hudScale;
+        float teamGaugeY = playerTeamPanelY + 12f * hudScale;
 
         shapeRenderer.setProjectionMatrix(hudCamera.combined);
         shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
@@ -809,35 +969,48 @@ public class Main3D implements ApplicationListener {
         }
 
         shapeRenderer.setColor(PANEL_COLOR);
-        shapeRenderer.rect(playerTeamPanelX, playerTeamPanelY, TEAM_STATUS_PANEL_WIDTH, TEAM_STATUS_PANEL_HEIGHT);
-        shapeRenderer.rect(enemyTeamPanelX, enemyTeamPanelY, TEAM_STATUS_PANEL_WIDTH, TEAM_STATUS_PANEL_HEIGHT);
-        shapeRenderer.rect(timePanelX, timePanelY, CENTER_TIME_PANEL_WIDTH, CENTER_TIME_PANEL_HEIGHT);
-        shapeRenderer.rect(infoPanelX, infoPanelY, BOTTOM_INFO_PANEL_WIDTH, BOTTOM_INFO_PANEL_HEIGHT);
-        drawWeaponSlotPanels(weaponPanelY);
+        shapeRenderer.rect(playerTeamPanelX, playerTeamPanelY, TEAM_PANEL_WIDTH * hudScale, TEAM_PANEL_HEIGHT * hudScale);
+        shapeRenderer.rect(enemyTeamPanelX, enemyTeamPanelY, TEAM_PANEL_WIDTH * hudScale, TEAM_PANEL_HEIGHT * hudScale);
+        shapeRenderer.rect(timePanelX, timePanelY, TIME_PANEL_WIDTH * hudScale, TIME_PANEL_HEIGHT * hudScale);
+        shapeRenderer.rect(infoPanelX, infoPanelY, INFO_PANEL_WIDTH * hudScale, infoPanelHeight);
+        drawWeaponSlotPanels(slotStartX, weaponPanelY, hudScale);
+        drawBarFill(
+            playerTeamPanelX + TEAM_PANEL_INNER_PADDING * hudScale,
+            teamGaugeY,
+            teamGaugeWidth,
+            TEAM_PAINT_BAR_HEIGHT * hudScale,
+            floorGrid.getPlayerPaintRatePercent() / 100f,
+            PLAYER_TEAM_MARKER_COLOR
+        );
+        drawBarFill(
+            enemyTeamPanelX + TEAM_PANEL_INNER_PADDING * hudScale,
+            enemyTeamPanelY + 12f * hudScale,
+            teamGaugeWidth,
+            TEAM_PAINT_BAR_HEIGHT * hudScale,
+            floorGrid.getEnemyPaintRatePercent() / 100f,
+            ENEMY_TEAM_MARKER_COLOR
+        );
 
         if (feedbackMessageTimer > 0f && feedbackMessageText != null && !feedbackMessageText.isEmpty()) {
-            shapeRenderer.rect(hudCamera.viewportWidth / 2f - 112f, hudCamera.viewportHeight / 2f + 52f, 224f, 34f);
+            shapeRenderer.rect(hudCamera.viewportWidth / 2f - 152f * hudScale, hudCamera.viewportHeight / 2f + 58f * hudScale, 304f * hudScale, 42f * hudScale);
         }
         if (player.isSplatted()) {
-            shapeRenderer.rect(hudCamera.viewportWidth / 2f - 140f, hudCamera.viewportHeight / 2f - 32f, 280f, 88f);
+            shapeRenderer.rect(hudCamera.viewportWidth / 2f - 166f * hudScale, hudCamera.viewportHeight / 2f - 42f * hudScale, 332f * hudScale, 102f * hudScale);
         }
-
-        drawBarFill(playerHpX, playerHpY, STATUS_BAR_WIDTH, STATUS_BAR_HEIGHT, player.getHp() / (float) Player3D.MAX_HP, PLAYER_HP_BAR_COLOR);
-        drawBarFill(inkX, inkY, STATUS_BAR_WIDTH, STATUS_BAR_HEIGHT, player.getInkAmount() / Player3D.MAX_INK_AMOUNT, INK_BAR_COLOR);
         shapeRenderer.end();
 
         shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
         shapeRenderer.setColor(PANEL_BORDER_COLOR);
-        shapeRenderer.rect(playerTeamPanelX, playerTeamPanelY, TEAM_STATUS_PANEL_WIDTH, TEAM_STATUS_PANEL_HEIGHT);
-        shapeRenderer.rect(enemyTeamPanelX, enemyTeamPanelY, TEAM_STATUS_PANEL_WIDTH, TEAM_STATUS_PANEL_HEIGHT);
-        shapeRenderer.rect(timePanelX, timePanelY, CENTER_TIME_PANEL_WIDTH, CENTER_TIME_PANEL_HEIGHT);
-        shapeRenderer.rect(infoPanelX, infoPanelY, BOTTOM_INFO_PANEL_WIDTH, BOTTOM_INFO_PANEL_HEIGHT);
-        drawWeaponSlotBorders(weaponPanelY);
+        shapeRenderer.rect(playerTeamPanelX, playerTeamPanelY, TEAM_PANEL_WIDTH * hudScale, TEAM_PANEL_HEIGHT * hudScale);
+        shapeRenderer.rect(enemyTeamPanelX, enemyTeamPanelY, TEAM_PANEL_WIDTH * hudScale, TEAM_PANEL_HEIGHT * hudScale);
+        shapeRenderer.rect(timePanelX, timePanelY, TIME_PANEL_WIDTH * hudScale, TIME_PANEL_HEIGHT * hudScale);
+        shapeRenderer.rect(infoPanelX, infoPanelY, INFO_PANEL_WIDTH * hudScale, infoPanelHeight);
+        drawWeaponSlotBorders(slotStartX, weaponPanelY, hudScale);
         if (feedbackMessageTimer > 0f && feedbackMessageText != null && !feedbackMessageText.isEmpty()) {
-            shapeRenderer.rect(hudCamera.viewportWidth / 2f - 112f, hudCamera.viewportHeight / 2f + 52f, 224f, 34f);
+            shapeRenderer.rect(hudCamera.viewportWidth / 2f - 152f * hudScale, hudCamera.viewportHeight / 2f + 58f * hudScale, 304f * hudScale, 42f * hudScale);
         }
         if (player.isSplatted()) {
-            shapeRenderer.rect(hudCamera.viewportWidth / 2f - 140f, hudCamera.viewportHeight / 2f - 32f, 280f, 88f);
+            shapeRenderer.rect(hudCamera.viewportWidth / 2f - 166f * hudScale, hudCamera.viewportHeight / 2f - 42f * hudScale, 332f * hudScale, 102f * hudScale);
         }
         shapeRenderer.end();
     }
@@ -1083,36 +1256,170 @@ public class Main3D implements ApplicationListener {
         return projectedPoint.z >= 0f && projectedPoint.z <= 1f;
     }
 
-    private void drawWeaponHudText() {
+    private void drawPlayerStatusGauges() {
+        if (flowState != GameFlowState.PLAYING || player.isSplatted()) {
+            return;
+        }
+        if (!projectPlayerStatusAnchors()) {
+            return;
+        }
+
+        float hudScale = getHudScale();
+        float clampMargin = PLAYER_STATUS_CLAMP_MARGIN * hudScale;
+        float minStatusY = WEAPON_PANEL_MARGIN * hudScale + WEAPON_PANEL_HEIGHT * hudScale + 28f * hudScale;
+        float hpWidth = PLAYER_HP_GAUGE_WIDTH * hudScale;
+        float hpHeight = PLAYER_HP_GAUGE_HEIGHT * hudScale;
+        float hpX = MathUtils.clamp(
+            projectedPlayerHeadGauge.x - hpWidth / 2f,
+            clampMargin,
+            hudCamera.viewportWidth - hpWidth - clampMargin
+        );
+        float hpY = MathUtils.clamp(
+            projectedPlayerHeadGauge.y + PLAYER_HP_GAUGE_OFFSET_Y * hudScale,
+            minStatusY,
+            hudCamera.viewportHeight - TEAM_PANEL_HEIGHT * hudScale - TOP_PANEL_MARGIN * hudScale - hpHeight - 14f * hudScale
+        );
+        float inkWidth = PLAYER_INK_GAUGE_WIDTH * hudScale;
+        float inkHeight = PLAYER_INK_GAUGE_HEIGHT * hudScale;
+        float inkX = MathUtils.clamp(
+            projectedPlayerBodyGauge.x - PLAYER_INK_GAUGE_OFFSET_X * hudScale - inkWidth,
+            INFO_PANEL_MARGIN * hudScale + INFO_PANEL_WIDTH * hudScale + 14f * hudScale,
+            hudCamera.viewportWidth - inkWidth - clampMargin
+        );
+        float inkY = MathUtils.clamp(
+            projectedPlayerBodyGauge.y - inkHeight / 2f,
+            minStatusY,
+            hudCamera.viewportHeight - TEAM_PANEL_HEIGHT * hudScale - TOP_PANEL_MARGIN * hudScale - inkHeight - 18f * hudScale
+        );
+
+        shapeRenderer.setProjectionMatrix(hudCamera.combined);
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
+        shapeRenderer.setColor(BAR_BACKGROUND_COLOR);
+        shapeRenderer.rect(hpX, hpY, hpWidth, hpHeight);
+        shapeRenderer.rect(inkX, inkY, inkWidth, inkHeight);
+        shapeRenderer.setColor(PLAYER_HP_BAR_COLOR);
+        shapeRenderer.rect(hpX, hpY, hpWidth * (player.getHp() / (float) Player3D.MAX_HP), hpHeight);
+        float inkRatio = player.getInkAmount() / Player3D.MAX_INK_AMOUNT;
+        shapeRenderer.setColor(INK_BAR_COLOR);
+        shapeRenderer.rect(inkX, inkY, inkWidth, inkHeight * inkRatio);
+        shapeRenderer.end();
+
+        shapeRenderer.begin(ShapeRenderer.ShapeType.Line);
+        shapeRenderer.setColor(PANEL_BORDER_COLOR);
+        shapeRenderer.rect(hpX, hpY, hpWidth, hpHeight);
+        shapeRenderer.rect(inkX, inkY, inkWidth, inkHeight);
+        shapeRenderer.end();
+    }
+
+    private void drawPlayerStatusText(float hudScale) {
+        if (!projectPlayerStatusAnchors()) {
+            return;
+        }
+
+        float clampMargin = PLAYER_STATUS_CLAMP_MARGIN * hudScale;
+        float minStatusY = WEAPON_PANEL_MARGIN * hudScale + WEAPON_PANEL_HEIGHT * hudScale + 28f * hudScale;
+        float hpWidth = PLAYER_HP_GAUGE_WIDTH * hudScale;
+        float hpHeight = PLAYER_HP_GAUGE_HEIGHT * hudScale;
+        float hpX = MathUtils.clamp(
+            projectedPlayerHeadGauge.x - hpWidth / 2f,
+            clampMargin,
+            hudCamera.viewportWidth - hpWidth - clampMargin
+        );
+        float hpY = MathUtils.clamp(
+            projectedPlayerHeadGauge.y + PLAYER_HP_GAUGE_OFFSET_Y * hudScale,
+            minStatusY,
+            hudCamera.viewportHeight - TEAM_PANEL_HEIGHT * hudScale - TOP_PANEL_MARGIN * hudScale - hpHeight - 14f * hudScale
+        );
+        float inkWidth = PLAYER_INK_GAUGE_WIDTH * hudScale;
+        float inkHeight = PLAYER_INK_GAUGE_HEIGHT * hudScale;
+        float inkX = MathUtils.clamp(
+            projectedPlayerBodyGauge.x - PLAYER_INK_GAUGE_OFFSET_X * hudScale - inkWidth,
+            INFO_PANEL_MARGIN * hudScale + INFO_PANEL_WIDTH * hudScale + 14f * hudScale,
+            hudCamera.viewportWidth - inkWidth - clampMargin
+        );
+        float inkY = MathUtils.clamp(
+            projectedPlayerBodyGauge.y - inkHeight / 2f,
+            minStatusY,
+            hudCamera.viewportHeight - TEAM_PANEL_HEIGHT * hudScale - TOP_PANEL_MARGIN * hudScale - inkHeight - 18f * hudScale
+        );
+
+        drawHudCenteredTextFit(
+            player.getHp() + " / " + Player3D.MAX_HP,
+            hpX + hpWidth / 2f,
+            hpY + hpHeight + PLAYER_STATUS_LABEL_GAP * hudScale + 12f * hudScale,
+            hpWidth + 34f * hudScale,
+            Color.WHITE,
+            PLAYER_STATUS_TEXT_SCALE * hudScale,
+            HUD_SCALE_TINY * hudScale,
+            true
+        );
+        drawHudCenteredTextFit(
+            "INK",
+            inkX + inkWidth / 2f,
+            inkY + inkHeight + PLAYER_STATUS_LABEL_GAP * hudScale + 12f * hudScale,
+            62f * hudScale,
+            INK_BAR_COLOR,
+            HUD_SCALE_SMALL * hudScale,
+            HUD_SCALE_TINY * hudScale,
+            true
+        );
+    }
+
+    private boolean projectPlayerStatusAnchors() {
+        if (player.isSplatted()) {
+            return false;
+        }
+        projectedPlayerHeadGauge.set(player.getPosition().x, player.getUiHeadAnchorY(), player.getPosition().z);
+        worldCamera.project(projectedPlayerHeadGauge);
+        if (!isProjectedPointVisible(projectedPlayerHeadGauge)) {
+            return false;
+        }
+
+        projectedPlayerBodyGauge.set(player.getPosition().x, player.getUiBodyAnchorY(), player.getPosition().z);
+        worldCamera.project(projectedPlayerBodyGauge);
+        return isProjectedPointVisible(projectedPlayerBodyGauge);
+    }
+
+    private void drawWeaponHudText(float slotStartX, float slotY, float hudScale) {
         WeaponConfig3D[] weapons = getWeaponSlots();
-        float slotY = WEAPON_PANEL_MARGIN;
         for (int i = 0; i < weapons.length; i++) {
-            float slotX = WEAPON_PANEL_MARGIN + i * (WEAPON_PANEL_WIDTH + WEAPON_PANEL_GAP);
+            float slotWidth = WEAPON_PANEL_WIDTH * hudScale;
+            float slotHeight = WEAPON_PANEL_HEIGHT * hudScale;
+            float slotX = slotStartX + i * (slotWidth + WEAPON_PANEL_GAP * hudScale);
             WeaponConfig3D weapon = weapons[i];
             Color titleColor = playerWeapon == weapon ? Color.WHITE : PANEL_BORDER_COLOR;
             Color roleColor = playerWeapon == weapon ? WEAPON_SLOT_ACTIVE_BORDER_COLOR : new Color(0.82f, 0.86f, 0.92f, 0.9f);
-            drawHudText((i + 1) + ": " + weapon.getName(), slotX + 10f, slotY + 31f, titleColor);
-            drawHudText(weapon.getRoleLabel(), slotX + 10f, slotY + 15f, roleColor);
+            drawHudLeftTextFit("[" + (i + 1) + "]", slotX + 10f * hudScale, slotY + slotHeight - 12f * hudScale, 34f * hudScale, Color.WHITE, HUD_SCALE_TINY * hudScale, HUD_SCALE_TINY * hudScale, false);
+            drawHudCenteredTextFit(weapon.getName(), slotX + slotWidth / 2f, slotY + slotHeight - 16f * hudScale, slotWidth - 44f * hudScale, titleColor, HUD_SCALE_SMALL * hudScale, HUD_SCALE_TINY * hudScale, false);
+            drawHudCenteredTextFit(weapon.getRoleLabel(), slotX + slotWidth / 2f, slotY + 18f * hudScale, slotWidth - 24f * hudScale, roleColor, HUD_SCALE_TINY * hudScale, HUD_SCALE_TINY * hudScale, false);
         }
     }
 
-    private void drawWeaponSlotPanels(float slotY) {
+    private void drawWeaponSlotPanels(float slotStartX, float slotY, float hudScale) {
         WeaponConfig3D[] weapons = getWeaponSlots();
         for (int i = 0; i < weapons.length; i++) {
-            float slotX = WEAPON_PANEL_MARGIN + i * (WEAPON_PANEL_WIDTH + WEAPON_PANEL_GAP);
+            float slotWidth = WEAPON_PANEL_WIDTH * hudScale;
+            float slotHeight = WEAPON_PANEL_HEIGHT * hudScale;
+            float slotX = slotStartX + i * (slotWidth + WEAPON_PANEL_GAP * hudScale);
             WeaponConfig3D weapon = weapons[i];
             shapeRenderer.setColor(playerWeapon == weapon ? WEAPON_SLOT_ACTIVE_COLOR : WEAPON_SLOT_COLOR);
-            shapeRenderer.rect(slotX, slotY, WEAPON_PANEL_WIDTH, WEAPON_PANEL_HEIGHT);
+            shapeRenderer.rect(slotX, slotY, slotWidth, slotHeight);
+            if (playerWeapon == weapon) {
+                shapeRenderer.setColor(WEAPON_SLOT_ACTIVE_BORDER_COLOR.r, WEAPON_SLOT_ACTIVE_BORDER_COLOR.g, WEAPON_SLOT_ACTIVE_BORDER_COLOR.b, 0.28f);
+                shapeRenderer.rect(slotX, slotY + slotHeight - WEAPON_PANEL_ACCENT_HEIGHT * hudScale, slotWidth, WEAPON_PANEL_ACCENT_HEIGHT * hudScale);
+            }
         }
     }
 
-    private void drawWeaponSlotBorders(float slotY) {
+    private void drawWeaponSlotBorders(float slotStartX, float slotY, float hudScale) {
         WeaponConfig3D[] weapons = getWeaponSlots();
         for (int i = 0; i < weapons.length; i++) {
-            float slotX = WEAPON_PANEL_MARGIN + i * (WEAPON_PANEL_WIDTH + WEAPON_PANEL_GAP);
+            float slotWidth = WEAPON_PANEL_WIDTH * hudScale;
+            float slotHeight = WEAPON_PANEL_HEIGHT * hudScale;
+            float slotX = slotStartX + i * (slotWidth + WEAPON_PANEL_GAP * hudScale);
             WeaponConfig3D weapon = weapons[i];
             shapeRenderer.setColor(playerWeapon == weapon ? WEAPON_SLOT_ACTIVE_BORDER_COLOR : PANEL_BORDER_COLOR);
-            shapeRenderer.rect(slotX, slotY, WEAPON_PANEL_WIDTH, WEAPON_PANEL_HEIGHT);
+            shapeRenderer.rect(slotX, slotY, slotWidth, slotHeight);
         }
     }
 

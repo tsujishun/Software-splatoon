@@ -361,6 +361,14 @@ public class Player3D implements Disposable {
         return climbing;
     }
 
+    public float getUiHeadAnchorY() {
+        return getVisualCenterY() + (swimming ? 0.2f : 0.56f);
+    }
+
+    public float getUiBodyAnchorY() {
+        return getVisualCenterY() + (swimming ? 0.02f : 0.08f);
+    }
+
     public void setSwimming(boolean swimming) {
         if (swimming && !grounded) {
             return;
@@ -439,13 +447,13 @@ public class Player3D implements Disposable {
         // The player model is built facing local -Z, so the Y rotation needs the opposite sign
         // to keep the nose on the true front side for left and right movement as well.
         float facingAngleDegrees = -MathUtils.atan2(facingDirection.x, -facingDirection.z) * MathUtils.radiansToDegrees;
-        float heightScale = swimming ? SWIM_HEIGHT_SCALE : 1f;
+        float heightScale = getCurrentHeightScale();
         float widthScale = swimming ? SWIM_WIDTH_SCALE : 1f;
         float depthScale = swimming ? SWIM_DEPTH_SCALE : 1f;
         float respawnScale = 1f + getRespawnScaleBonus();
         float movementBobOffset = getMovementBobOffset();
         float recoilOffsetZ = getRecoilOffsetZ();
-        float visualY = position.y - PLAYER_HEIGHT * (1f - heightScale) * 0.32f + movementBobOffset;
+        float visualY = getVisualCenterY();
         actorTransform.idt();
         actorTransform.translate(position.x, visualY, position.z);
         actorTransform.rotate(Vector3.Y, facingAngleDegrees);
@@ -489,6 +497,14 @@ public class Player3D implements Disposable {
             return 0f;
         }
         return 0.28f + 0.3f * (0.5f + 0.5f * MathUtils.sin(invincibleTimer * 24f));
+    }
+
+    private float getCurrentHeightScale() {
+        return swimming ? SWIM_HEIGHT_SCALE : 1f;
+    }
+
+    private float getVisualCenterY() {
+        return position.y - PLAYER_HEIGHT * (1f - getCurrentHeightScale()) * 0.32f + getMovementBobOffset();
     }
 
     private Color applyVisualTint(Color tintTarget, Color baseColor, float invincibleFlash, float hitFlash) {
